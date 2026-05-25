@@ -1,4 +1,3 @@
-using System.Text.Json;
 using FreeAgent.Kernel;
 
 namespace FreeAgent.Kernel.Tests;
@@ -20,7 +19,7 @@ public sealed class RecordingPermissionEngine : IPermissionEngine
     public static RecordingPermissionEngine Allowing() => new(PermissionDecision.Allow());
     public static RecordingPermissionEngine Denying(string reason) => new(PermissionDecision.Deny(reason));
 
-    public PermissionDecision Decide(ToolCall call, ITool tool, JsonDocument arguments)
+    public PermissionDecision Decide(ITool tool, IReadOnlyList<Capability> capabilities, string workingDirectory)
     {
         DecideCallCount++;
         return _decision;

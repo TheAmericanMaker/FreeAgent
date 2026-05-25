@@ -50,18 +50,22 @@ public sealed class ToolPipeline
                 return ToolResult.InvalidInput($"Unknown tool: {call.Name}");
             }
 
+            var context = new ToolContext(state);
+
             // Step 3 — sanity-check (path-escape / workspace boundary). Future seam.
             StepLog.Add("sanity-check");
 
             // Step 4 — plan-mode-guard (block non-read-only tools in plan mode). Future seam.
             StepLog.Add("plan-mode-guard");
 
-            // Step 5 — permission.
+            // Step 5 — permission. Gather the tool's required capabilities and let the engine
+            // decide; an uncovered, denied, or blocked capability stops here before any side effect.
             StepLog.Add("permission");
-            var decision = _permissions.Decide(call, tool, arguments);
+            var capabilities = tool.RequiredCapabilities(arguments, context);
+            var decision = _permissions.Decide(tool, capabilities, state.WorkingDirectory);
             if (!decision.Allowed)
             {
-                return ToolResult.PermissionDenied($"Permission denied: {decision.Reason}");
+                return ToolResult.PermissionDenied(decision.Reason, decision.RetryHint);
             }
 
             // Step 6 — cache-lookup (read-only tools only). Future seam; a miss is not a failure.
@@ -76,7 +80,7 @@ public sealed class ToolPipeline
             ToolResult result;
             try
             {
-                result = await tool.ExecuteAsync(arguments, new ToolContext(state), cancellationToken);
+                result = await tool.ExecuteAsync(arguments, context, cancellationToken);
             }
             catch (OperationCanceledException)
             {
