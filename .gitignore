@@ -1,0 +1,20 @@
+# .NET
+bin/
+obj/
+TestResults/
+*.user
+*.suo
+*.rsuser
+
+# IDE/editor
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local agent/runtime scratch
+.pi/
+.codecarto/
+.codecarto.backup-*/

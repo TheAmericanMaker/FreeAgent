@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/FreeAgent.Kernel.Tests/FreeAgent.Kernel.Tests.csproj" />
+    <Project Path="src/FreeAgent.Kernel/FreeAgent.Kernel.csproj" />
+  </Folder>
+</Solution>
