@@ -112,7 +112,7 @@ public sealed class KernelAcceptanceTests
 
         await store.SaveAsync(state, CancellationToken.None);
 
-        fs.Operations.Should().Equal("write-temp", "fsync-temp", "rename");
+        fs.Operations.Should().Equal("create-temp", "write-temp", "fsync-temp", "rename", "fsync-directory");
     }
 
     [Fact]
