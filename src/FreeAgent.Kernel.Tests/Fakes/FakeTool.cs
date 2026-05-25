@@ -13,13 +13,14 @@ public sealed class FakeTool : ITool
         Func<JsonDocument, ToolResult> execute,
         bool isReadOnly = false,
         bool isConcurrencySafe = false,
-        Func<JsonDocument, ToolContext, IReadOnlyList<Capability>>? capabilities = null)
+        Func<JsonDocument, ToolContext, IReadOnlyList<Capability>>? capabilities = null,
+        string schemaJson = "{}")
     {
         Name = name;
         _execute = execute;
         IsReadOnly = isReadOnly;
         IsConcurrencySafe = isConcurrencySafe;
-        InputSchema = JsonDocument.Parse("{}");
+        InputSchema = JsonDocument.Parse(schemaJson);
         _capabilities = capabilities ?? ((_, _) => []);
     }
 

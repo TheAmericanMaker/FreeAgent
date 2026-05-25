@@ -42,12 +42,19 @@ public sealed class ToolPipeline
         {
             // Step 2 — schema-validate. Resolving the tool (and therefore its schema) happens
             // here; an unknown tool is an input error and must short-circuit before permission.
-            // (Real schema validation against tool.InputSchema is a future seam.)
+            // Arguments are then validated against the tool's declared input schema. A schema
+            // failure stops before capabilities are gathered or any side effect occurs.
             StepLog.Add("schema-validate");
             var tool = _registry.Find(call.Name);
             if (tool is null)
             {
                 return ToolResult.InvalidInput($"Unknown tool: {call.Name}");
+            }
+
+            var validation = ToolInputSchemaValidator.Validate(tool.InputSchema, arguments);
+            if (!validation.IsValid)
+            {
+                return ToolResult.InvalidInput($"Invalid arguments for tool '{call.Name}': {validation.Error}");
             }
 
             var context = new ToolContext(state);

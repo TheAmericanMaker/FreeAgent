@@ -203,4 +203,110 @@ public sealed class ToolPipelineContractTests
             "parse", "schema-validate", "sanity-check", "plan-mode-guard", "permission", "cache-lookup",
             "pre-hook", "execute", "post-hook", "artifact-store", "cache-write", "invalidate");
     }
+
+    // ── Schema validation (pipeline step 2) ──────────────────────────────────
+
+    private const string PathSchema =
+        """{"type":"object","required":["path"],"properties":{"path":{"type":"string"}}}""";
+
+    // A. A required-property failure short-circuits at schema-validate.
+    [Fact]
+    public async Task SchemaValidationFailureReturnsInvalidInputAndShortCircuitsBeforePermission()
+    {
+        var registry = new ToolRegistry();
+        var tool = new FakeTool("reader", _ => ToolResult.Success("should-not-run"), schemaJson: PathSchema);
+        registry.Register(tool);
+        var perms = RecordingPermissionEngine.Allowing();
+        var pipeline = new ToolPipeline(registry, perms);
+
+        var result = await pipeline.ExecuteAsync(Call("reader", "{}"), NewState(), CancellationToken.None);
+
+        result.Kind.Should().Be(ToolResultKind.InvalidInput);
+        result.Content.Should().Contain("path");
+        result.Content.Should().ContainEquivalentOf("required");
+        perms.DecideCallCount.Should().Be(0);
+        tool.ExecutionCount.Should().Be(0);
+        pipeline.StepLog.Should().Contain("schema-validate");
+        pipeline.StepLog.Should().NotContain("permission");
+        pipeline.StepLog.Should().NotContain("execute");
+    }
+
+    // B (pipeline). Wrong primitive type also fails through the pipeline.
+    [Fact]
+    public async Task SchemaTypeMismatchReturnsInvalidInput()
+    {
+        var registry = new ToolRegistry();
+        var tool = new FakeTool(
+            "counter",
+            _ => ToolResult.Success("should-not-run"),
+            schemaJson: """{"type":"object","properties":{"count":{"type":"integer"}}}""");
+        registry.Register(tool);
+        var pipeline = new ToolPipeline(registry, RecordingPermissionEngine.Allowing());
+
+        var result = await pipeline.ExecuteAsync(Call("counter", """{"count":"nope"}"""), NewState(), CancellationToken.None);
+
+        result.Kind.Should().Be(ToolResultKind.InvalidInput);
+        result.Content.Should().Contain("count");
+        tool.ExecutionCount.Should().Be(0);
+    }
+
+    // I (pipeline). A malformed tool schema is reported as InvalidInput, not a crash.
+    [Fact]
+    public async Task MalformedToolSchemaReturnsInvalidInputWithoutCrashing()
+    {
+        var registry = new ToolRegistry();
+        var tool = new FakeTool(
+            "broken",
+            _ => ToolResult.Success("should-not-run"),
+            schemaJson: """{"type":"object","required":"path"}""");
+        registry.Register(tool);
+        var pipeline = new ToolPipeline(registry, RecordingPermissionEngine.Allowing());
+
+        var result = await pipeline.ExecuteAsync(Call("broken", "{}"), NewState(), CancellationToken.None);
+
+        result.Kind.Should().Be(ToolResultKind.InvalidInput);
+        tool.ExecutionCount.Should().Be(0);
+    }
+
+    // K. Schema failure stops before RequiredCapabilities is consulted.
+    [Fact]
+    public async Task SchemaValidationFailureDoesNotCallRequiredCapabilities()
+    {
+        var registry = new ToolRegistry();
+        var tool = new FakeTool(
+            "reader",
+            _ => ToolResult.Success("should-not-run"),
+            capabilities: (_, _) => throw new InvalidOperationException("capabilities must not be collected on schema failure"),
+            schemaJson: PathSchema);
+        registry.Register(tool);
+        var pipeline = new ToolPipeline(registry, RecordingPermissionEngine.Allowing());
+
+        var result = await pipeline.ExecuteAsync(Call("reader", "{}"), NewState(), CancellationToken.None);
+
+        result.Kind.Should().Be(ToolResultKind.InvalidInput);
+        tool.ExecutionCount.Should().Be(0);
+    }
+
+    // J. Valid arguments proceed through permission/capabilities to execution.
+    [Fact]
+    public async Task ValidArgumentsProceedToExecutionAndRecordTwelveSteps()
+    {
+        var registry = new ToolRegistry();
+        var tool = new FakeTool(
+            "reader",
+            _ => ToolResult.Success("data"),
+            isReadOnly: true,
+            capabilities: (_, ctx) => [new FileReadCap(Path.Combine(ctx.Session.WorkingDirectory, "a.txt"))],
+            schemaJson: PathSchema);
+        registry.Register(tool);
+        var pipeline = new ToolPipeline(registry, new PermissionEngine());
+
+        var result = await pipeline.ExecuteAsync(Call("reader", """{"path":"a.txt"}"""), NewState(), CancellationToken.None);
+
+        result.Kind.Should().Be(ToolResultKind.Success);
+        result.Content.Should().Be("data");
+        pipeline.StepLog.Should().Equal(
+            "parse", "schema-validate", "sanity-check", "plan-mode-guard", "permission", "cache-lookup",
+            "pre-hook", "execute", "post-hook", "artifact-store", "cache-write", "invalidate");
+    }
 }
