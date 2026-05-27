@@ -4,7 +4,15 @@ namespace FreeAgent.Kernel;
 
 public sealed class SessionRuntime
 {
-    private const int MaxIterations = 1000;
+    // Hard ceiling on agentic iterations within a single turn. Matches the Hermes Agent default of
+    // 90; a genuinely stuck turn that escapes the doom-loop guard still terminates here.
+    private const int MaxIterations = 90;
+
+    // After the doom-loop guard first trips, the model is re-prompted (with the repeat suppressed)
+    // up to this many times to give it a chance to recover. Once the budget is spent and it is still
+    // looping, the turn halts rather than re-prompting indefinitely.
+    private const int DoomRecoveryBudget = 3;
+
     private readonly IProvider _provider;
     private readonly IToolRegistry _tools;
     private readonly TurnExecutor _turnExecutor;
@@ -35,6 +43,7 @@ public sealed class SessionRuntime
         _state.Messages.Add(new Message(MessageRole.User, userText));
         var finalText = new StringBuilder();
         var doomDetected = false;
+        var doomReprompts = 0;
 
         for (var iteration = 0; iteration < MaxIterations; iteration++)
         {
@@ -89,7 +98,17 @@ public sealed class SessionRuntime
             if (_doomLoop.Observe(calls))
             {
                 doomDetected = true;
-                _state.Messages.Add(new Message(MessageRole.Assistant, "Doom loop detected: this identical tool-call batch has repeated 3 times and will not be run again. Change your approach or stop."));
+                doomReprompts++;
+
+                // Budget spent and still looping: stop running the repeat and end the turn so the
+                // user can intervene, rather than re-prompting up to the iteration ceiling.
+                if (doomReprompts > DoomRecoveryBudget)
+                {
+                    _state.Messages.Add(new Message(MessageRole.Assistant, $"Doom loop detected: the identical tool-call batch persisted through {DoomRecoveryBudget} recovery attempts. Halting the turn."));
+                    break;
+                }
+
+                _state.Messages.Add(new Message(MessageRole.Assistant, $"Doom loop detected: this identical tool-call batch has repeated and will not be run again (recovery attempt {doomReprompts} of {DoomRecoveryBudget}). Change your approach or stop."));
                 continue;
             }
 
