@@ -130,6 +130,62 @@ public class OpenAIProviderTests : IDisposable
         toolDeltas.Select(c => c.ToolCallDelta!.ArgumentsJson).Should().Equal("", "", "1", "2");
     }
 
+    [Theory]
+    [InlineData("reasoning_content")]
+    [InlineData("reasoning")]
+    public async Task ReasoningDelta_YieldsThinkingDelta(string field)
+    {
+        WireResponse(
+            "data: {\"id\":\"x\",\"choices\":[{\"index\":0,\"delta\":{\"" + field + "\":\"thinking...\"}}]}\n" +
+            "data: {\"id\":\"x\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"answer\"}}]}\n" +
+            "data: [DONE]\n\n");
+
+        _provider = new OpenAIProvider(_httpClient, "https://api.openai.com/v1/");
+
+        var chunks = await _provider.StreamChatAsync(StubRequest(), default).ToListAsync();
+
+        chunks.Where(c => !string.IsNullOrEmpty(c.ThinkingDelta)).Select(c => c.ThinkingDelta)
+            .Should().Equal("thinking...");
+        chunks.Where(c => !string.IsNullOrEmpty(c.TextDelta)).Select(c => c.TextDelta)
+            .Should().Equal("answer");
+    }
+
+    [Fact]
+    public async Task DataPrefix_WithoutSpace_IsParsed()
+    {
+        // The space after "data:" is optional per the SSE spec.
+        WireResponse("""
+            data:{"id":"x","choices":[{"index":0,"delta":{"content":"spaceless"}}]}
+            data:[DONE]
+
+            """);
+
+        _provider = new OpenAIProvider(_httpClient, "https://api.openai.com/v1/");
+
+        var chunks = await _provider.StreamChatAsync(StubRequest(), default).ToListAsync();
+
+        chunks.Where(c => !string.IsNullOrEmpty(c.TextDelta)).Select(c => c.TextDelta)
+            .Should().Equal("spaceless");
+    }
+
+    [Fact]
+    public async Task NoTools_OmitsToolsPropertyEntirely()
+    {
+        // OpenAI rejects an empty "tools": [] with HTTP 400, so it must be omitted when absent.
+        WireResponse("""
+            data: {"id":"1","choices":[{"index":0,"delta":{}}]}
+            data: [DONE]
+
+            """);
+
+        _provider = new OpenAIProvider(_httpClient, "https://api.openai.com/v1/");
+
+        var req = new ProviderRequest([new Message(MessageRole.User, "hi")], []);
+        var _ = await _provider.StreamChatAsync(req, default).ToListAsync();
+
+        _handler.LastBody.Should().NotContain("\"tools\"");
+    }
+
     [Fact]
     public async Task Usage_ExtractedFromChunk()
     {

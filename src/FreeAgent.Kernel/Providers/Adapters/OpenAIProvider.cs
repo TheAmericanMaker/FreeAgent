@@ -28,7 +28,10 @@ public sealed class OpenAIProvider : IProvider, IDisposable
 
         _model = model;
         _ownsClient = true;
-        _httpClient = new HttpClient();
+        // No request timeout: a streamed completion can legitimately run for minutes, and the
+        // default 100s HttpClient.Timeout would abort it. Per-call cancellation comes from the
+        // CancellationToken passed to StreamChatAsync instead.
+        _httpClient = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
         _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
         _baseUri = new Uri(baseUrl.TrimEnd('/') + "/");
     }
@@ -52,9 +55,16 @@ public sealed class OpenAIProvider : IProvider, IDisposable
 
         var body = BuildRequestBody(request);
         using var httpContent = new StringContent(body, Encoding.UTF8, "application/json");
-        var response = await _httpClient.PostAsync(
-            new Uri(_baseUri, "chat/completions"),
-            httpContent,
+        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, new Uri(_baseUri, "chat/completions"))
+        {
+            Content = httpContent
+        };
+        // ResponseHeadersRead returns as soon as the headers arrive, so the SSE body is read
+        // incrementally below. The default (ResponseContentRead) would buffer the entire
+        // response before returning, collapsing the stream into a single burst.
+        var response = await _httpClient.SendAsync(
+            httpRequest,
+            HttpCompletionOption.ResponseHeadersRead,
             cancellationToken);
 
         if (!response.IsSuccessStatusCode)
@@ -76,10 +86,12 @@ public sealed class OpenAIProvider : IProvider, IDisposable
 
             if (string.IsNullOrWhiteSpace(line))
                 continue;
-            if (!line.StartsWith("data: ", StringComparison.Ordinal))
+            // The space after "data:" is optional per the SSE spec; accept both "data: {...}"
+            // and "data:{...}" and strip a single leading space if present.
+            if (!line.StartsWith("data:", StringComparison.Ordinal))
                 continue;
 
-            var data = line[6..];
+            var data = line[5..].TrimStart();
             if (data == "[DONE]")
                 break;
 
@@ -110,6 +122,17 @@ public sealed class OpenAIProvider : IProvider, IDisposable
 
             if (choice.TryGetProperty("delta", out var delta))
             {
+                // Reasoning/thinking delta. Reasoning models on OpenAI-compatible endpoints stream
+                // their chain-of-thought separately from the answer: OpenAI-style "reasoning" and
+                // DeepSeek-style "reasoning_content" are both accepted here.
+                if ((delta.TryGetProperty("reasoning_content", out var reasoningProp)
+                        || delta.TryGetProperty("reasoning", out reasoningProp))
+                    && reasoningProp.ValueKind == JsonValueKind.String
+                    && reasoningProp.GetString() is { Length: > 0 } reasoning)
+                {
+                    yield return new StreamChunk(reasoning, null, null, null, isComplete);
+                }
+
                 // Text delta
                 if (delta.TryGetProperty("content", out var contentProp)
                     && contentProp.ValueKind == JsonValueKind.String)
@@ -189,11 +212,15 @@ public sealed class OpenAIProvider : IProvider, IDisposable
             WriteMessage(writer, message);
         writer.WriteEndArray();
 
-        writer.WritePropertyName("tools");
-        writer.WriteStartArray();
-        foreach (var tool in request.Tools)
-            WriteTool(writer, tool);
-        writer.WriteEndArray();
+        // Omit "tools" entirely when there are none: OpenAI rejects an empty "tools": [] with HTTP 400.
+        if (request.Tools.Count > 0)
+        {
+            writer.WritePropertyName("tools");
+            writer.WriteStartArray();
+            foreach (var tool in request.Tools)
+                WriteTool(writer, tool);
+            writer.WriteEndArray();
+        }
 
         writer.WriteBoolean("stream", true);
         writer.WritePropertyName("stream_options");

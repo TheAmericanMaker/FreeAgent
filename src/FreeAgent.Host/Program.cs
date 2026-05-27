@@ -50,10 +50,14 @@ public static class Program
         CancellationTokenSource? turnCts = null;
         Console.CancelKeyPress += (_, e) =>
         {
-            if (turnCts is { } active)
+            // Runs on the console signal thread, racing the per-turn cleanup below. Read the field
+            // atomically and tolerate a source the loop has already disposed.
+            var active = Volatile.Read(ref turnCts);
+            if (active is not null)
             {
                 e.Cancel = true;
-                active.Cancel();
+                try { active.Cancel(); }
+                catch (ObjectDisposedException) { /* turn already finished; nothing to cancel */ }
             }
         };
 
@@ -74,7 +78,7 @@ public static class Program
                 Console.WriteLine();
 
                 if (result.DoomLoopDetected)
-                    Console.WriteLine("[Doom loop detected — turn ended early]");
+                    Console.WriteLine("[Doom loop detected — a repeated tool-call batch was suppressed]");
             }
             catch (OperationCanceledException)
             {
@@ -86,8 +90,9 @@ public static class Program
             }
             finally
             {
-                turnCts.Dispose();
-                turnCts = null;
+                // Clear the field before disposing so the Ctrl+C handler can never observe a
+                // non-null reference to an already-disposed source.
+                Interlocked.Exchange(ref turnCts, null)?.Dispose();
             }
         }
 

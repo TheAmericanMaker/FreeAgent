@@ -75,10 +75,15 @@ appears on the first chunk.
 ### Doom-loop detection (`DoomLoopDetector`)
 
 The detector builds a signature per batch: `name:canonicalJson` for each call,
-joined with `|`. Arguments are canonicalized (re-serialized through `JsonOptions`)
-so semantically identical args with different whitespace/key order still match. A
-counter increments while the signature is unchanged and fires at threshold 3. The
-detector is reset at the start of every turn.
+joined with `|`. Arguments are canonicalized (re-serialized through `JsonOptions`,
+falling back to the raw text if they are malformed or truncated so a parse error
+can never escape the turn) so semantically identical args with different
+whitespace/key order still match. A counter increments while the signature is
+unchanged and trips once the count reaches the threshold (3) — and stays tripped for
+every subsequent identical batch. On a trip, `SessionRuntime` records a notice and
+re-prompts the model (it does **not** execute the repeat); the detector resets at the
+start of every turn. A model that never recovers is ultimately bounded by the
+runtime's 1000-iteration cap.
 
 ## Tool execution
 

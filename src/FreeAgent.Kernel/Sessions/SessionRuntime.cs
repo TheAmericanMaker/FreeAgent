@@ -89,7 +89,7 @@ public sealed class SessionRuntime
             if (_doomLoop.Observe(calls))
             {
                 doomDetected = true;
-                _state.Messages.Add(new Message(MessageRole.Assistant, "Doom loop detected: identical tool-call batch repeated 3 times. Breaking the loop."));
+                _state.Messages.Add(new Message(MessageRole.Assistant, "Doom loop detected: this identical tool-call batch has repeated 3 times and will not be run again. Change your approach or stop."));
                 continue;
             }
 

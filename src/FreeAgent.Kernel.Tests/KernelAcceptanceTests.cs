@@ -62,6 +62,43 @@ public sealed class KernelAcceptanceTests
     }
 
     [Fact]
+    public async Task DoomLoopDetectorSuppressesEveryIdenticalBatchAfterDetection()
+    {
+        // Four identical batches in a row, then a recovery text. The repeat must never run again
+        // once detected, so the tool executes only for the first two batches.
+        var batch = StreamScript.ToolCall("same", "echo", "{\"value\":\"x\"}");
+        var harness = KernelHarness.Create(batch, batch, batch, batch, StreamScript.Text("stopped"));
+        var tool = new FakeTool("echo", _ => ToolResult.Success("x"));
+        harness.Registry.Register(tool);
+
+        var result = await harness.Runtime.RunTurnAsync("loop", CancellationToken.None);
+
+        result.DoomLoopDetected.Should().BeTrue();
+        result.FinalText.Should().Be("stopped");
+        harness.Provider.Requests.Should().HaveCount(5);
+        tool.ExecutionCount.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task MalformedToolCallArgumentsDoNotCrashTheTurn()
+    {
+        // Empty/truncated accumulated arguments must not throw out of the doom-loop signature step;
+        // the pipeline maps the bad JSON to InvalidInput and the turn recovers on the next reply.
+        var harness = KernelHarness.Create(
+            StreamScript.ToolCall("c1", "echo", ""),
+            StreamScript.Text("ok"));
+        var tool = new FakeTool("echo", _ => ToolResult.Success("x"));
+        harness.Registry.Register(tool);
+
+        var result = await harness.Runtime.RunTurnAsync("bad-args", CancellationToken.None);
+
+        result.FinalText.Should().Be("ok");
+        tool.ExecutionCount.Should().Be(0);
+        harness.State.Messages.Should().Contain(m =>
+            m.Role == MessageRole.Tool && m.ToolCallId == "c1" && m.Content.Contains("Invalid", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public async Task ToolPipelineOrderIsDeterministic()
     {
         var harness = KernelHarness.Create(StreamScript.ToolCall("call-1", "echo", "{}"), StreamScript.Text("done"));

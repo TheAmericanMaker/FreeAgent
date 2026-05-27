@@ -128,7 +128,7 @@ user text
 │                                                              │
 │   no tool calls?  ─▶ save session, return final text  ✔      │
 │                                                              │
-│   same tool-call batch 3× in a row? ─▶ doom-loop break       │
+│   same tool-call batch 3× in a row? ─▶ suppress + re-prompt  │
 │                                                              │
 │   else: run the batch through the TurnExecutor,              │
 │         append tool results, loop again                      │
@@ -140,9 +140,11 @@ SSE chunks; the runtime buffers argument fragments by call id and emits one
 complete `ToolCall` per id once the stream ends.
 
 **Doom-loop detection.** If the model emits the *identical* tool-call batch (same
-names + canonicalized JSON args) three times running, the runtime injects a notice
-into the transcript and breaks the loop instead of spinning forever. The result
-carries `DoomLoopDetected = true`.
+names + canonicalized JSON args) three times running, the runtime stops executing
+that batch and re-prompts the model — injecting a notice into the transcript so it
+can change course — rather than running the repeat. Every further identical batch is
+likewise suppressed; the hard ceiling on a genuinely stuck turn is the 1000-iteration
+loop bound. The result carries `DoomLoopDetected = true`.
 
 **Concurrency contract (`TurnExecutor`).** Within a single batch:
 
