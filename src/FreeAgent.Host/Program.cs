@@ -35,6 +35,8 @@ public static class Program
         registry.Register(new ProcessExecTool());
         registry.Register(new GlobTool());
         registry.Register(new GrepTool());
+        registry.Register(new EnterPlanModeTool());
+        registry.Register(new ExitPlanModeTool());
 
         // ── session state ────────────────────────────────────────
         var sessionId = Guid.NewGuid().ToString()[..8];
@@ -72,6 +74,12 @@ public static class Program
             if (string.IsNullOrWhiteSpace(input))
                 continue;
 
+            if (input.StartsWith('/'))
+            {
+                HandleCommand(input, state);
+                continue;
+            }
+
             turnCts = new CancellationTokenSource();
             try
             {
@@ -104,6 +112,30 @@ public static class Program
 
     private static string GetEnv(string key, string fallback) =>
         Environment.GetEnvironmentVariable(key) is { } value ? value : fallback;
+
+    /// <summary>
+    /// Handles a slash command typed at the prompt. Today only <c>/plan [on|off]</c> exists (the
+    /// model can also toggle it via the EnterPlanMode/ExitPlanMode tools); the switch is the seam for
+    /// future commands.
+    /// </summary>
+    private static void HandleCommand(string input, SessionState state)
+    {
+        var parts = input.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        switch (parts[0].ToLowerInvariant())
+        {
+            case "/plan":
+                state.PlanMode = parts.Length > 1 && parts[1] is "on" or "off"
+                    ? parts[1] == "on"
+                    : !state.PlanMode;
+                Console.WriteLine(state.PlanMode
+                    ? "Plan mode: ON — only read-only tools will run until you turn it off."
+                    : "Plan mode: OFF — writable tools are enabled.");
+                break;
+            default:
+                Console.WriteLine($"Unknown command: {parts[0]}. Available: /plan [on|off]");
+                break;
+        }
+    }
 
     private static void PrintBanner()
     {
