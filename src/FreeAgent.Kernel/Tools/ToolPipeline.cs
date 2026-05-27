@@ -5,7 +5,7 @@ namespace FreeAgent.Kernel;
 /// <summary>
 /// The 12-step per-tool-call pipeline. Every call traverses the steps in strict order;
 /// a failure short-circuits before any later side-effecting step runs. Steps that have no
-/// kernel-level implementation yet (schema-validate, sanity-check, plan-mode-guard, cache,
+/// kernel-level implementation yet (sanity-check, cache,
 /// hooks, artifact-store, invalidate) are explicit no-op seams: they record their place in
 /// <see cref="StepLog"/> so the order is observable and the extension point is obvious.
 /// See contracts §"Tool Execution Pipeline".
@@ -63,8 +63,15 @@ public sealed class ToolPipeline
             // Step 3 — sanity-check (path-escape / workspace boundary). Future seam.
             AddStep("sanity-check");
 
-            // Step 4 — plan-mode-guard (block non-read-only tools in plan mode). Future seam.
+            // Step 4 — plan-mode-guard. While plan mode is active only read-only tools may run;
+            // a writable tool is blocked here, before the permission step gathers capabilities
+            // or any side effect occurs. The step is logged before the short-circuit so the
+            // order stays observable.
             AddStep("plan-mode-guard");
+            if (state.PlanMode && !tool.IsReadOnly)
+            {
+                return ToolResult.PlanModeBlocked(tool.Name);
+            }
 
             // Step 5 — permission. Gather the tool's required capabilities and let the engine
             // decide; an uncovered, denied, or blocked capability stops here before any side effect.

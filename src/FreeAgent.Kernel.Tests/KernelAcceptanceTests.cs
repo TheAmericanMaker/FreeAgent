@@ -127,4 +127,69 @@ public sealed class KernelAcceptanceTests
         harness.Events.Text.Should().ContainSingle().Which.Should().Be("visible");
         harness.Events.Usage.Should().ContainSingle().Which.Should().Be(new Usage(1, 2));
     }
+
+    // ── ToolCallDelta accumulation ─────────────────────────────────────────
+
+    [Fact]
+    public async Task ToolCallDeltasAccumulateAcrossChunks()
+    {
+        var harness = KernelHarness.Create(
+            StreamScript.Script(
+                StreamScript.T("Let me "),
+                StreamScript.Delta("call-1", "echo", "{\"val"),
+                StreamScript.T("check"),
+                StreamScript.Delta("call-1", "", "ue\":\"abc\"}"),
+                StreamScript.Done()),
+            StreamScript.Text("done"));
+        harness.Registry.Register(new FakeTool("echo", args => ToolResult.Success("echo:" + args.RootElement.GetProperty("value").GetString())));
+
+        var result = await harness.Runtime.RunTurnAsync("accumulate", CancellationToken.None);
+
+        result.FinalText.Should().Be("done");
+        harness.Provider.Requests.Should().HaveCount(2);
+        harness.State.Messages.Should().Contain(m =>
+            m.Role == MessageRole.Tool && m.ToolCallId == "call-1" && m.Content == "echo:abc");
+    }
+
+    [Fact]
+    public async Task MultipleToolCallsAccumulateIndependently()
+    {
+        var harness = KernelHarness.Create(
+            StreamScript.Script(
+                StreamScript.Delta("call-1", "echo", "{\"val"),
+                StreamScript.Delta("call-2", "echo", "{\"va"),
+                StreamScript.Delta("call-1", "", "ue\":\"x\"}"),
+                StreamScript.Delta("call-2", "", "lue\":\"y\"}"),
+                StreamScript.Done()),
+            StreamScript.Text("done"));
+        harness.Registry.Register(new FakeTool("echo", args => ToolResult.Success("echo:" + args.RootElement.GetProperty("value").GetString())));
+
+        var result = await harness.Runtime.RunTurnAsync("multi", CancellationToken.None);
+
+        result.FinalText.Should().Be("done");
+        harness.State.Messages.Should().Contain(m => m.Role == MessageRole.Tool && m.ToolCallId == "call-1" && m.Content == "echo:x");
+        harness.State.Messages.Should().Contain(m => m.Role == MessageRole.Tool && m.ToolCallId == "call-2" && m.Content == "echo:y");
+    }
+
+    [Fact]
+    public async Task PartialToolCallAccumulationPreservesText()
+    {
+        var harness = KernelHarness.Create(
+            StreamScript.Script(
+                StreamScript.T("Let me "),
+                StreamScript.Delta("call-1", "echo", "{\"value\":\"a"),
+                StreamScript.T("check that"),
+                StreamScript.Delta("call-1", "", "bc\"}"),
+                StreamScript.Done()),
+            StreamScript.Text("done"));
+        harness.Registry.Register(new FakeTool("echo", args => ToolResult.Success("echo:" + args.RootElement.GetProperty("value").GetString())));
+
+        var result = await harness.Runtime.RunTurnAsync("partial", CancellationToken.None);
+
+        result.FinalText.Should().Be("done");
+        harness.State.Messages.Should().Contain(m =>
+            m.Role == MessageRole.Assistant && m.Content == "Let me check that");
+        harness.State.Messages.Should().Contain(m =>
+            m.Role == MessageRole.Tool && m.Content == "echo:abc");
+    }
 }

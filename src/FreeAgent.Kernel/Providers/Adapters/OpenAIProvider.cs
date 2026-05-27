@@ -1,0 +1,307 @@
+using System.Net;
+using System.Net.Http.Headers;
+using System.Runtime.CompilerServices;
+using System.Text;
+using System.Text.Json;
+
+namespace FreeAgent.Kernel;
+
+/// <summary>
+/// OpenAI-compatible streaming provider adapter. Supports chat.completions with
+/// tool-calling via SSE. Normalises trailing slashes on the base URL. Thread-safe
+/// for concurrent calls because <see cref="HttpClient"/> is shared and immutable
+/// after construction.
+/// </summary>
+public sealed class OpenAIProvider : IProvider, IDisposable
+{
+    private readonly string _model;
+    private readonly HttpClient _httpClient;
+    private readonly Uri _baseUri;
+    private readonly bool _ownsClient;
+    private bool _disposed;
+
+    public OpenAIProvider(string baseUrl, string apiKey, string model = "gpt-4o")
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(baseUrl);
+        ArgumentException.ThrowIfNullOrWhiteSpace(apiKey);
+        ArgumentException.ThrowIfNullOrWhiteSpace(model);
+
+        _model = model;
+        _ownsClient = true;
+        _httpClient = new HttpClient();
+        _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+        _baseUri = new Uri(baseUrl.TrimEnd('/') + "/");
+    }
+
+    public OpenAIProvider(HttpClient httpClient, string baseUrl, string model = "gpt-4o")
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(baseUrl);
+        ArgumentException.ThrowIfNullOrWhiteSpace(model);
+
+        _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
+        _model = model;
+        _ownsClient = false;
+        _baseUri = new Uri(baseUrl.TrimEnd('/') + "/");
+    }
+
+    public async IAsyncEnumerable<StreamChunk> StreamChatAsync(
+        ProviderRequest request,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        var body = BuildRequestBody(request);
+        using var httpContent = new StringContent(body, Encoding.UTF8, "application/json");
+        var response = await _httpClient.PostAsync(
+            new Uri(_baseUri, "chat/completions"),
+            httpContent,
+            cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var error = await response.Content.ReadAsStringAsync(cancellationToken);
+            throw new HttpRequestException(
+                $"OpenAI API returned {(int)response.StatusCode} ({response.StatusCode}): {error}",
+                inner: null,
+                statusCode: response.StatusCode);
+        }
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var reader = new StreamReader(stream, Encoding.UTF8);
+        var idByIndex = new Dictionary<int, string>();
+
+        while (await reader.ReadLineAsync(cancellationToken) is { } line)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (string.IsNullOrWhiteSpace(line))
+                continue;
+            if (!line.StartsWith("data: ", StringComparison.Ordinal))
+                continue;
+
+            var data = line[6..];
+            if (data == "[DONE]")
+                break;
+
+            using var doc = JsonDocument.Parse(data);
+            var root = doc.RootElement;
+
+            // Usage-only chunk has empty choices array
+            if (!root.TryGetProperty("choices", out var choices) || choices.GetArrayLength() == 0)
+            {
+                if (root.TryGetProperty("usage", out var usage))
+                {
+                    var u = TryParseUsage(usage);
+                    if (u is not null)
+                        yield return new StreamChunk(null, null, null, u, false);
+                }
+                continue;
+            }
+
+            var choice = choices[0];
+            bool isComplete = false;
+
+            if (choice.TryGetProperty("finish_reason", out var fr)
+                && fr.ValueKind != JsonValueKind.Null
+                && !string.IsNullOrEmpty(fr.GetString()))
+            {
+                isComplete = true;
+            }
+
+            if (choice.TryGetProperty("delta", out var delta))
+            {
+                // Text delta
+                if (delta.TryGetProperty("content", out var contentProp)
+                    && contentProp.ValueKind == JsonValueKind.String)
+                {
+                    var text = contentProp.GetString() ?? string.Empty;
+                    if (!string.IsNullOrEmpty(text))
+                    {
+                        yield return new StreamChunk(null, text, null, null, isComplete);
+                    }
+                    else if (isComplete)
+                    {
+                        yield return new StreamChunk(null, null, null, null, true);
+                    }
+                }
+
+                // Tool-call deltas
+                if (delta.TryGetProperty("tool_calls", out var toolCalls))
+                {
+                    foreach (var tc in toolCalls.EnumerateArray())
+                    {
+                        if (!tc.TryGetProperty("index", out var idxProp))
+                            continue;
+                        var index = idxProp.GetInt32();
+
+                        string id;
+                        if (tc.TryGetProperty("id", out var idProp) && idProp.GetString() is { } parsedId)
+                        {
+                            id = parsedId;
+                            idByIndex[index] = id;
+                        }
+                        else if (idByIndex.TryGetValue(index, out var cachedId))
+                        {
+                            id = cachedId;
+                        }
+                        else
+                        {
+                            continue;
+                        }
+
+                        string name = string.Empty;
+                        string args = string.Empty;
+
+                        if (tc.TryGetProperty("function", out var func))
+                        {
+                            if (func.TryGetProperty("name", out var nameProp) && nameProp.GetString() is { } n)
+                                name = n;
+                            if (func.TryGetProperty("arguments", out var argsProp) && argsProp.ValueKind == JsonValueKind.String)
+                                args = argsProp.GetString() ?? string.Empty;
+                        }
+
+                        yield return new StreamChunk(null, null, new ToolCallDelta(id, name, args), null, isComplete);
+                    }
+                }
+            }
+            else if (isComplete)
+            {
+                // finish_reason set but no delta (final sentinel)
+                yield return new StreamChunk(null, null, null, null, true);
+            }
+        }
+
+        // Stream ended naturally or via [DONE]
+        yield return new StreamChunk(null, null, null, null, true);
+    }
+
+    private string BuildRequestBody(ProviderRequest request)
+    {
+        using var ms = new System.IO.MemoryStream();
+        using var writer = new Utf8JsonWriter(ms, new JsonWriterOptions { Indented = false });
+
+        writer.WriteStartObject();
+        writer.WriteString("model", _model);
+
+        writer.WritePropertyName("messages");
+        writer.WriteStartArray();
+        foreach (var message in request.Messages)
+            WriteMessage(writer, message);
+        writer.WriteEndArray();
+
+        writer.WritePropertyName("tools");
+        writer.WriteStartArray();
+        foreach (var tool in request.Tools)
+            WriteTool(writer, tool);
+        writer.WriteEndArray();
+
+        writer.WriteBoolean("stream", true);
+        writer.WritePropertyName("stream_options");
+        writer.WriteStartObject();
+        writer.WriteBoolean("include_usage", true);
+        writer.WriteEndObject();
+
+        writer.WriteEndObject();
+        writer.Flush();
+
+        return Encoding.UTF8.GetString(ms.ToArray());
+    }
+
+    private static void WriteMessage(Utf8JsonWriter writer, Message message)
+    {
+        writer.WriteStartObject();
+
+        writer.WriteString("role", message.Role switch
+        {
+            MessageRole.System => "system",
+            MessageRole.User => "user",
+            MessageRole.Assistant => "assistant",
+            MessageRole.Tool => "tool",
+            _ => "user"
+        });
+
+        if (message.Role == MessageRole.Tool && !string.IsNullOrEmpty(message.ToolCallId))
+            writer.WriteString("tool_call_id", message.ToolCallId);
+
+        if (message.Role == MessageRole.Tool && !string.IsNullOrEmpty(message.ToolName))
+            writer.WriteString("name", message.ToolName);
+
+        writer.WriteString("content", message.Content ?? string.Empty);
+
+        if (message.ToolCalls?.Count > 0 && message.Role == MessageRole.Assistant)
+        {
+            writer.WritePropertyName("tool_calls");
+            writer.WriteStartArray();
+            foreach (var tc in message.ToolCalls)
+            {
+                writer.WriteStartObject();
+                writer.WriteString("id", tc.Id);
+                writer.WriteString("type", "function");
+                writer.WritePropertyName("function");
+                writer.WriteStartObject();
+                writer.WriteString("name", tc.Name);
+                writer.WriteString("arguments", tc.ArgumentsJson);
+                writer.WriteEndObject();
+                writer.WriteEndObject();
+            }
+            writer.WriteEndArray();
+        }
+
+        writer.WriteEndObject();
+    }
+
+    private static void WriteTool(Utf8JsonWriter writer, ToolDefinition tool)
+    {
+        writer.WriteStartObject();
+        writer.WriteString("type", "function");
+        writer.WritePropertyName("function");
+        writer.WriteStartObject();
+        writer.WriteString("name", tool.Name);
+        writer.WritePropertyName("parameters");
+        tool.InputSchema.WriteTo(writer);
+        writer.WriteEndObject();
+        writer.WriteEndObject();
+    }
+
+    private static Usage? TryParseUsage(JsonElement usage)
+    {
+        int input = 0;
+        int output = 0;
+        bool hasAny = false;
+
+        if (usage.TryGetProperty("prompt_tokens", out var pt))
+        {
+            input = pt.GetInt32();
+            hasAny = true;
+        }
+        else if (usage.TryGetProperty("input_tokens", out var it))
+        {
+            input = it.GetInt32();
+            hasAny = true;
+        }
+
+        if (usage.TryGetProperty("completion_tokens", out var ct))
+        {
+            output = ct.GetInt32();
+            hasAny = true;
+        }
+        else if (usage.TryGetProperty("output_tokens", out var ot))
+        {
+            output = ot.GetInt32();
+            hasAny = true;
+        }
+
+        return hasAny ? new Usage(input, output) : null;
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+            return;
+
+        if (_ownsClient)
+            _httpClient.Dispose();
+
+        _disposed = true;
+    }
+}

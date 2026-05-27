@@ -16,6 +16,13 @@ public enum ToolResultKind
     /// <summary>Explicit permission denial. May carry a retry hint.</summary>
     PermissionDenied,
 
+    /// <summary>
+    /// Plan mode is active and a non-read-only tool was called. Distinct from
+    /// <see cref="PermissionDenied"/>: it is raised at the plan-mode guard (pipeline step 4),
+    /// before capabilities are gathered, so it never consults the permission engine.
+    /// </summary>
+    PlanModeBlocked,
+
     /// <summary>Optimistic-concurrency conflict; carries a retry hint.</summary>
     StateConflict,
 
@@ -48,6 +55,15 @@ public sealed record ToolResult(ToolResultKind Kind, string Content, string? Ret
 
     public static ToolResult PermissionDenied(string content, string? retryHint = null) =>
         new(ToolResultKind.PermissionDenied, content, retryHint);
+
+    /// <summary>
+    /// Plan-mode guard rejection for the non-read-only <paramref name="toolName"/>. The
+    /// mandated wording lives here so it has a single source of truth (contracts §"/plan").
+    /// </summary>
+    public static ToolResult PlanModeBlocked(string toolName) =>
+        new(ToolResultKind.PlanModeBlocked,
+            $"Plan mode is active — only read-only tools are allowed. Call ExitPlanMode first to make changes with {toolName}.",
+            $"Call ExitPlanMode first to make changes with {toolName}.");
 
     public static ToolResult StateConflict(string content, string retryHint) =>
         new(ToolResultKind.StateConflict, content, retryHint);

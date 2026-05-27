@@ -39,7 +39,7 @@ public sealed class SessionRuntime
         for (var iteration = 0; iteration < MaxIterations; iteration++)
         {
             var text = new StringBuilder();
-            var calls = new List<ToolCall>();
+            var partialCalls = new Dictionary<string, PartialToolCall>();
             var request = new ProviderRequest(_state.Messages.ToArray(), _tools.Definitions);
 
             await foreach (var chunk in _provider.StreamChatAsync(request, cancellationToken).WithCancellation(cancellationToken))
@@ -57,7 +57,15 @@ public sealed class SessionRuntime
 
                 if (chunk.ToolCallDelta is not null)
                 {
-                    calls.Add(new ToolCall(chunk.ToolCallDelta.Id, chunk.ToolCallDelta.Name, chunk.ToolCallDelta.ArgumentsJson));
+                    var delta = chunk.ToolCallDelta;
+                    if (partialCalls.TryGetValue(delta.Id, out var existing))
+                    {
+                        existing.ArgumentsJson += delta.ArgumentsJson;
+                    }
+                    else
+                    {
+                        partialCalls[delta.Id] = new PartialToolCall(delta.Id, delta.Name, delta.ArgumentsJson);
+                    }
                 }
 
                 if (chunk.Usage is not null)
@@ -66,7 +74,11 @@ public sealed class SessionRuntime
                 }
             }
 
-            if (calls.Count == 0)
+            var calls = partialCalls.Values
+                .Select(p => new ToolCall(p.Id, p.Name, p.ArgumentsJson))
+                .ToArray();
+
+            if (calls.Length == 0)
             {
                 finalText.Append(text);
                 _state.Messages.Add(new Message(MessageRole.Assistant, text.ToString()));
@@ -83,7 +95,7 @@ public sealed class SessionRuntime
 
             _state.Messages.Add(new Message(MessageRole.Assistant, text.ToString(), calls.ToArray()));
             var results = await _turnExecutor.ExecuteBatchAsync(calls, _state, cancellationToken);
-            for (var resultIndex = 0; resultIndex < calls.Count; resultIndex++)
+            for (var resultIndex = 0; resultIndex < calls.Length; resultIndex++)
             {
                 var call = calls[resultIndex];
                 var result = results[resultIndex];
@@ -93,5 +105,17 @@ public sealed class SessionRuntime
 
         await _store.SaveAsync(_state, cancellationToken);
         return new TurnResult(finalText.ToString(), doomDetected);
+    }
+
+    /// <summary>
+    /// Mutable accumulator for a single tool call's streaming deltas. The provider may split one
+    /// logical call across multiple <see cref="ToolCallDelta"/> chunks; we buffer by <see cref="Id"/>
+    /// until the stream ends, then emit one <see cref="ToolCall"/> per collected id.
+    /// </summary>
+    private sealed class PartialToolCall(string id, string name, string argumentsJson)
+    {
+        public string Id { get; } = id;
+        public string Name { get; } = name;
+        public string ArgumentsJson { get; set; } = argumentsJson;
     }
 }
