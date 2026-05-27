@@ -307,6 +307,9 @@ The full behavioral contract the kernel implements is in
 
 ## Roadmap & non-goals
 
+See [`ROADMAP.md`](ROADMAP.md) for the full backlog (much of it seeded from
+FreeAgent's OpenMonoAgent.ai lineage). In brief:
+
 The pipeline's *(seam)* steps mark where the next features attach without reworking
 the core: result caching, pre/post hooks, large-artifact offloading, and
 cache invalidation. The permission engine already models capabilities
