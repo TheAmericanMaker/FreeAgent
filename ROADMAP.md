@@ -15,22 +15,14 @@ the core."
 ## Near-term — wire up what the kernel already models
 
 Mostly small, because the design already has the hook. Generally more pressing than
-the larger ported features further down.
+the larger ported features further down. (The first daily-driver batch is now done —
+see below.)
 
-- [ ] **Tool `Description` field** — `ToolDefinition` carries no description, so the
-  provider sends tools name-only; add descriptions for reliable tool selection.
-- [ ] **Plan-mode toggle** — `SessionState.PlanMode` and the pipeline guard exist, but
-  nothing flips the flag; add `EnterPlanMode`/`ExitPlanMode` tools and a `/plan` command.
-- [ ] **Permission rules from config** — the engine supports allow/deny tool and
-  capability rules; the host wires none. Load them from a config file and/or flags so
-  writes and extra binaries can be granted without code changes.
-- [ ] **Session resume** — `JsonlSessionStore.LoadAsync` already works; add a host
-  `--resume <id>` path.
-- [ ] **Glob / Grep read-only tools** — round out discovery. Both can be read-only +
-  concurrency-safe, so they parallelize for free under the existing execution contract.
 - [ ] **Local-server providers** — Ollama already works via
-  `OPENAI_BASE_URL=http://localhost:11434/v1`; document recipes for Ollama / llama.cpp /
-  vLLM, and consider a native Ollama provider for its non-OpenAI features.
+  `OPENAI_BASE_URL=http://localhost:11434/v1`; consider a native Ollama provider for its
+  non-OpenAI features (a recipe is in `docs/usage.md`).
+- [ ] **More slash commands** — `/status`, `/model`, `/help` alongside the existing
+  `/plan` (the host command dispatch is in place).
 
 ## Coming next — larger features
 
@@ -91,3 +83,11 @@ from the current per-turn `MaxIterations`) would be a separate counter if ever a
 - [x] Real tool adapters — `ReadFile`, `WriteFile`, `ProcessExec`
 - [x] Plan-mode guard in the pipeline
 - [x] Interactive host CLI (REPL, env config, per-turn Ctrl+C)
+
+### Daily-driver usability milestone
+
+- [x] Tool `Description` field wired through `ITool` / `ToolDefinition` / the OpenAI request
+- [x] `Glob` and `Grep` read-only search tools (managed, workspace-scoped, capped)
+- [x] Plan-mode toggle — `EnterPlanMode` / `ExitPlanMode` tools and a `/plan` host command
+- [x] Config-driven permission rules (`PermissionConfig`, `.freeagent/config.json`)
+- [x] Session resume — host `--resume [id]`

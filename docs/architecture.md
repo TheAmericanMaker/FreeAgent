@@ -126,12 +126,20 @@ Each call runs the 12-step pipeline described in the
 
 ### Tools (`ITool`)
 
-A tool declares `Name`, an `InputSchema` (`JsonDocument`), `IsReadOnly`,
-`IsConcurrencySafe`, the `RequiredCapabilities(args, context)` for a given call, and
-`ExecuteAsync`. `RequiredCapabilities` is what couples a tool to the permission
+A tool declares `Name`, a model-facing `Description` (serialized as the provider's
+`function.description`, so it shapes tool selection), an `InputSchema` (`JsonDocument`),
+`IsReadOnly`, `IsConcurrencySafe`, the `RequiredCapabilities(args, context)` for a given
+call, and `ExecuteAsync`. `RequiredCapabilities` is what couples a tool to the permission
 engine: the tool says *what authorization this specific call needs*, derived from
 its arguments, and the engine decides. `WorkspacePath.Resolve` is shared between
 capability derivation and execution so the path checked equals the path acted on.
+
+The read-only search tools `Glob` and `Grep` (managed, no `rg` dependency) share
+`WorkspaceSearch` for deterministic, noise-dir-skipping, capped file walking and
+glob-to-regex matching; both are `IsReadOnly` + `IsConcurrencySafe`, so they run in the
+parallel window. `EnterPlanMode` / `ExitPlanMode` are read-only, capability-free tools
+that flip `SessionState.PlanMode` — read-only specifically so `ExitPlanMode` is never
+blocked by the plan-mode guard while plan mode is active.
 
 ## Permission engine (`PermissionEngine`)
 
@@ -142,8 +150,10 @@ clock, no I/O, no prompts. Session rules are configured by method
 `AllowCapabilityRule<T>(pattern)`, `DenyCapabilityRule<T>(pattern)`).
 
 Rules match a capability's `MatchTarget` (path, binary, host, …) with an anchored,
-case-insensitive glob (`*` = any run, `?` = one char). The full precedence and the
-hardcoded allow/block sets are in the
+case-insensitive glob (`*` = any run, `?` = one char). `PermissionConfig` loads the same
+rules declaratively from a JSON file at host startup (validating capability names against
+the reflected `Capability` catalog) so they can be set without code. The full precedence
+and the hardcoded allow/block sets are in the
 [README](../README.md#permission-model). The key invariant: **denies and hardcoded
 security blocks always beat allows**, and an uncovered capability denies rather than
 defaulting open.

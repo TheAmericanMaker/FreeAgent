@@ -112,12 +112,14 @@ non-read-only tool before the permission step.
 
 ## Adding things
 
-- **A new tool:** implement `ITool` (declare `IsReadOnly`/`IsConcurrencySafe` honestly —
-  they drive parallel scheduling), derive its `Capability` in `RequiredCapabilities`,
-  resolve paths with `WorkspacePath.Resolve` (the same rule the permission engine uses,
-  so the checked path equals the acted path), let `OperationCanceledException`
-  propagate (the pipeline maps it to `Cancelled`), and map other failures to
-  `ToolResult` classes rather than throwing. Register it in `src/FreeAgent.Host/Program.cs`.
+- **A new tool:** implement `ITool` (write a real `Description` — it's sent to the model;
+  declare `IsReadOnly`/`IsConcurrencySafe` honestly — they drive parallel scheduling),
+  derive its `Capability` in `RequiredCapabilities`, resolve paths with
+  `WorkspacePath.Resolve` (the same rule the permission engine uses, so the checked path
+  equals the acted path), let `OperationCanceledException` propagate (the pipeline maps it
+  to `Cancelled`), and map other failures to `ToolResult` classes rather than throwing.
+  Register it in `src/FreeAgent.Host/Program.cs`. For file-walking/glob, reuse
+  `WorkspaceSearch` (see `GlobTool`/`GrepTool`).
 - **A new provider:** implement `IProvider.StreamChatAsync` yielding `StreamChunk`s;
   mirror `OpenAIProvider` (SSE parsing, per-id tool-call accumulation, usage extraction).
 
