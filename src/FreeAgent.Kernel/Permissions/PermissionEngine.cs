@@ -63,6 +63,14 @@ public sealed class PermissionEngine : IPermissionEngine
     public void AllowCapabilityRule<TCapability>(string pattern) where TCapability : Capability =>
         _allowRules.Add(new CapabilityRule(typeof(TCapability).Name, pattern));
 
+    // Name-keyed overloads for config-driven rules. The engine matches capabilities by their type
+    // name internally, so these store the same way as the generic forms; callers (e.g.
+    // PermissionConfig) are responsible for validating that the name is a real capability type.
+    public void AllowCapabilityType(string capabilityTypeName) => _allowedCapabilityTypes.Add(capabilityTypeName);
+    public void DenyCapabilityType(string capabilityTypeName) => _deniedCapabilityTypes.Add(capabilityTypeName);
+    public void AllowCapabilityRule(string capabilityTypeName, string pattern) => _allowRules.Add(new CapabilityRule(capabilityTypeName, pattern));
+    public void DenyCapabilityRule(string capabilityTypeName, string pattern) => _denyRules.Add(new CapabilityRule(capabilityTypeName, pattern));
+
     public PermissionDecision Decide(ITool tool, IReadOnlyList<Capability> capabilities, string workingDirectory)
     {
         // 1. Hardcoded security blocks — apply even if an allow rule or AllowTool is set.

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FreeAgent.Kernel;
 
 namespace FreeAgent.Host;
@@ -24,6 +25,7 @@ public static class Program
         var provider = new OpenAIProvider(baseUrl, apiKey, model);
         var registry = new ToolRegistry();
         var permissions = new PermissionEngine();
+        LoadPermissionConfig(permissions, workingDir);
         var pipeline = new ToolPipeline(registry, permissions);
         var fs = new LinuxAtomicFileSystem();
         var store = new JsonlSessionStore(fs);
@@ -112,6 +114,32 @@ public static class Program
 
     private static string GetEnv(string key, string fallback) =>
         Environment.GetEnvironmentVariable(key) is { } value ? value : fallback;
+
+    /// <summary>
+    /// Loads permission allow/deny rules from <c>$FREEAGENT_CONFIG</c> (or <c>.freeagent/config.json</c>
+    /// in the working directory) and applies them to the engine. A missing file is fine; a malformed
+    /// one is a non-fatal warning so a bad config never blocks startup.
+    /// </summary>
+    private static void LoadPermissionConfig(PermissionEngine permissions, string workingDir)
+    {
+        var path = Environment.GetEnvironmentVariable("FREEAGENT_CONFIG");
+        if (string.IsNullOrWhiteSpace(path))
+            path = Path.Combine(workingDir, ".freeagent", "config.json");
+
+        if (!File.Exists(path))
+            return;
+
+        try
+        {
+            var config = PermissionConfig.Parse(File.ReadAllText(path));
+            config.ApplyTo(permissions);
+            Console.WriteLine($"Loaded {config.RuleCount} permission rule(s) from {path}");
+        }
+        catch (Exception ex) when (ex is JsonException or ArgumentException or IOException or UnauthorizedAccessException)
+        {
+            Console.Error.WriteLine($"Warning: ignoring permission config '{path}': {ex.Message}");
+        }
+    }
 
     /// <summary>
     /// Handles a slash command typed at the prompt. Today only <c>/plan [on|off]</c> exists (the
