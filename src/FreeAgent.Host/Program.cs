@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text.Json;
 using FreeAgent.Kernel;
 
@@ -7,17 +8,29 @@ public static class Program
 {
     public static async Task Main(string[] args)
     {
-        var workingDir = Environment.CurrentDirectory;
-        var baseUrl = GetEnv("OPENAI_BASE_URL", "https://api.openai.com/v1");
-        var apiKey = GetEnv("OPENAI_API_KEY", "");
-        var model = GetEnv("FREEMODEL", "gpt-4o-mini");
         var options = HostOptions.Parse(args);
+        if (options.Help)
+        {
+            PrintHelp();
+            return;
+        }
+        if (options.Version)
+        {
+            Console.WriteLine($"freeagent {Version}");
+            return;
+        }
+
+        var workingDir = Environment.CurrentDirectory;
+        var providerConfig = ProviderConfig.Load();
+        var baseUrl = providerConfig.ResolveBaseUrl();
+        var apiKey = providerConfig.ResolveApiKey();
+        var model = providerConfig.ResolveModel();
 
         // ── bootstrap ──────────────────────────────────────────────
         if (string.IsNullOrWhiteSpace(apiKey))
         {
-            Console.Error.WriteLine("Error: OPENAI_API_KEY is not set.");
-            Console.Error.WriteLine("Set it via environment variable or export it before running.");
+            Console.Error.WriteLine("Error: no API key found.");
+            Console.Error.WriteLine($"Set OPENAI_API_KEY, or add \"apiKey\" to {ProviderConfig.ConfigPath()}.");
             Environment.Exit(1);
             return;
         }
@@ -113,8 +126,47 @@ public static class Program
         Console.WriteLine("\nSession saved. Goodbye.");
     }
 
-    private static string GetEnv(string key, string fallback) =>
-        Environment.GetEnvironmentVariable(key) is { } value ? value : fallback;
+    private static string Version
+    {
+        get
+        {
+            var informational = typeof(Program).Assembly
+                .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+            // Strip any "+<git-sha>" build metadata SourceLink may append.
+            var trimmed = informational?.Split('+', 2)[0];
+            return trimmed ?? typeof(Program).Assembly.GetName().Version?.ToString() ?? "unknown";
+        }
+    }
+
+    private static void PrintHelp()
+    {
+        Console.WriteLine($"""
+            freeagent {Version} — interactive agent CLI over any OpenAI-compatible endpoint.
+
+            USAGE
+              freeagent [options]
+
+            Run it from the directory you want the agent to work in; that directory is its sandbox.
+
+            OPTIONS
+              -h, --help        Show this help and exit.
+                  --version     Show the version and exit.
+              -v, --verbose     Stream the model's reasoning (dimmed) and per-turn token usage.
+                  --resume [id] Resume the session in ./session.jsonl (optionally requiring its id).
+
+            PROMPT COMMANDS
+              /plan [on|off]    Toggle plan mode (only read-only tools run).
+              exit | quit       End the session (also saved on Ctrl+D / EOF).
+              Ctrl+C            Cancel the current turn without quitting.
+
+            CONFIGURATION (precedence: environment > config file > default)
+              OPENAI_API_KEY    Provider API key (required).
+              OPENAI_BASE_URL   Endpoint base (default {ProviderConfig.DefaultBaseUrl}).
+              FREEMODEL         Model name (default {ProviderConfig.DefaultModel}).
+              User config:      {ProviderConfig.ConfigPath()}  (baseUrl / model / apiKey)
+              Permissions:      ./.freeagent/config.json  (allow/deny rules)
+            """);
+    }
 
     private static SessionState NewSession(string workingDir) =>
         new(Guid.NewGuid().ToString()[..8], workingDir, DateTimeOffset.UtcNow);

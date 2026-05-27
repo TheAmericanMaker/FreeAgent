@@ -12,6 +12,22 @@ public sealed class HostOptionsTests
         options.Verbose.Should().BeFalse();
         options.Resume.Should().BeFalse();
         options.ResumeId.Should().BeNull();
+        options.Help.Should().BeFalse();
+        options.Version.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("--help")]
+    [InlineData("-h")]
+    public void HelpFlagRecognised(string flag)
+    {
+        HostOptions.Parse([flag]).Help.Should().BeTrue();
+    }
+
+    [Fact]
+    public void VersionFlagRecognised()
+    {
+        HostOptions.Parse(["--version"]).Version.Should().BeTrue();
     }
 
     [Theory]

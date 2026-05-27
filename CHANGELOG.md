@@ -6,6 +6,19 @@ All notable changes to FreeAgent are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added — packaging & distribution
+
+- **Global tool** — `FreeAgent.Host` packs as a .NET tool (`dotnet tool install -g FreeAgent`),
+  exposing a single `freeagent` command that runs in the current directory. `scripts/install.sh`
+  builds and installs/updates it from a local checkout.
+- **`--help` / `--version`** flags.
+- **User-level provider config** — `ProviderConfig` reads `~/.config/freeagent/config.json`
+  (XDG-aware) for `baseUrl` / `model` / `apiKey`, with precedence env > file > default, so the bare
+  command works without exporting env vars.
+- **Release workflow** — `.github/workflows/release.yml` builds/tests on `v*` tags, packs the tool,
+  publishes to NuGet when `NUGET_API_KEY` is set, and attaches self-contained binaries
+  (linux-x64 / osx-arm64 / win-x64) to the GitHub Release.
+
 ### Added — daily-driver usability milestone
 
 - **Tool descriptions** — `ITool.Description`, threaded through `ToolDefinition` and sent
