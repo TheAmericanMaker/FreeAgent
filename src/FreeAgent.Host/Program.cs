@@ -11,7 +11,7 @@ public static class Program
         var baseUrl = GetEnv("OPENAI_BASE_URL", "https://api.openai.com/v1");
         var apiKey = GetEnv("OPENAI_API_KEY", "");
         var model = GetEnv("FREEMODEL", "gpt-4o-mini");
-        var verbose = args.Contains("--verbose") || args.Contains("-v");
+        var options = HostOptions.Parse(args);
 
         // ── bootstrap ──────────────────────────────────────────────
         if (string.IsNullOrWhiteSpace(apiKey))
@@ -29,7 +29,7 @@ public static class Program
         var pipeline = new ToolPipeline(registry, permissions);
         var fs = new LinuxAtomicFileSystem();
         var store = new JsonlSessionStore(fs);
-        var events = new ConsoleEventSink(verbose);
+        var events = new ConsoleEventSink(options.Verbose);
 
         // Register real tool adapters
         registry.Register(new ReadFileTool());
@@ -41,13 +41,14 @@ public static class Program
         registry.Register(new ExitPlanModeTool());
 
         // ── session state ────────────────────────────────────────
-        var sessionId = Guid.NewGuid().ToString()[..8];
-        var state = new SessionState(sessionId, workingDir, DateTimeOffset.UtcNow);
+        var state = options.Resume
+            ? await ResumeOrFreshAsync(store, workingDir, options.ResumeId)
+            : NewSession(workingDir);
         var runtime = new SessionRuntime(provider, registry, pipeline, store, events, state);
 
         // ── launch ─────────────────────────────────────────────────
         PrintBanner();
-        Console.WriteLine($"Session: {sessionId} | Model: {model} | Working directory: {workingDir}");
+        Console.WriteLine($"Session: {state.SessionId} | Model: {model} | Working directory: {workingDir}");
         Console.WriteLine("Type 'exit' or press Ctrl+C to quit.\n");
 
         // Register the Ctrl+C handler once. While a turn is running it cancels that
@@ -114,6 +115,42 @@ public static class Program
 
     private static string GetEnv(string key, string fallback) =>
         Environment.GetEnvironmentVariable(key) is { } value ? value : fallback;
+
+    private static SessionState NewSession(string workingDir) =>
+        new(Guid.NewGuid().ToString()[..8], workingDir, DateTimeOffset.UtcNow);
+
+    /// <summary>
+    /// Resumes the session persisted at <c>{workingDir}/session.jsonl</c>, optionally requiring its id
+    /// to equal <paramref name="requiredId"/>. Any problem (missing file, id mismatch, malformed
+    /// transcript) falls back to a fresh session with a clear message — resume never aborts startup.
+    /// </summary>
+    private static async Task<SessionState> ResumeOrFreshAsync(JsonlSessionStore store, string workingDir, string? requiredId)
+    {
+        var path = Path.Combine(workingDir, "session.jsonl");
+        if (!File.Exists(path))
+        {
+            Console.Error.WriteLine($"No session to resume at {path}; starting a new session.");
+            return NewSession(workingDir);
+        }
+
+        try
+        {
+            var state = await store.DeserializeAsync(await File.ReadAllTextAsync(path), default);
+            if (requiredId is not null && !string.Equals(state.SessionId, requiredId, StringComparison.Ordinal))
+            {
+                Console.Error.WriteLine($"Session in {path} is '{state.SessionId}', not '{requiredId}'; starting a new session.");
+                return NewSession(workingDir);
+            }
+
+            Console.WriteLine($"Resumed session {state.SessionId} ({state.Messages.Count} message(s) restored).");
+            return state;
+        }
+        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
+        {
+            Console.Error.WriteLine($"Could not resume {path}: {ex.Message}; starting a new session.");
+            return NewSession(workingDir);
+        }
+    }
 
     /// <summary>
     /// Loads permission allow/deny rules from <c>$FREEAGENT_CONFIG</c> (or <c>.freeagent/config.json</c>
