@@ -43,7 +43,7 @@ fully testable against fakes.
 ## The turn loop (`SessionRuntime`)
 
 `RunTurnAsync(userText, ct)` appends the user message to `SessionState.Messages`,
-then loops up to `MaxIterations` (1000) times:
+then loops up to `MaxIterations` (90) times:
 
 1. Build a `ProviderRequest` from the **full** message history and the registry's
    current `ToolDefinition`s.
@@ -56,9 +56,11 @@ then loops up to `MaxIterations` (1000) times:
 4. **Terminate** if there are no tool calls: append the assistant text, persist the
    session, and return `TurnResult(finalText, doomDetected)`.
 5. **Doom-loop guard**: feed the batch to `DoomLoopDetector.Observe`. On the third
-   identical batch in a row it returns true; the runtime appends a notice message,
-   sets `doomDetected`, and `continue`s (re-prompting the model) rather than
-   executing the repeat.
+   identical batch in a row (and every one after) it returns true; the runtime appends
+   a notice message, sets `doomDetected`, and `continue`s (re-prompting the model)
+   rather than executing the repeat. It tolerates up to `DoomRecoveryBudget` (3) such
+   re-prompts; once that budget is spent and the model is still looping, the runtime
+   `break`s and the turn halts.
 6. Otherwise append the assistant message (text + tool calls), execute the batch via
    `TurnExecutor`, append one `Tool` message per result (preserving call order), and
    loop.
@@ -82,8 +84,9 @@ whitespace/key order still match. A counter increments while the signature is
 unchanged and trips once the count reaches the threshold (3) — and stays tripped for
 every subsequent identical batch. On a trip, `SessionRuntime` records a notice and
 re-prompts the model (it does **not** execute the repeat); the detector resets at the
-start of every turn. A model that never recovers is ultimately bounded by the
-runtime's 1000-iteration cap.
+start of every turn. `SessionRuntime` allows `DoomRecoveryBudget` (3) such re-prompts
+and then halts the turn, so a model that never recovers stops promptly rather than
+running to the 90-iteration `MaxIterations` ceiling.
 
 ## Tool execution
 

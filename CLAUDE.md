@@ -51,7 +51,7 @@ testable against fakes with no network, model, or real filesystem.
 
 ### The turn loop
 
-`SessionRuntime.RunTurnAsync` runs the agentic loop (bounded at 1000 iterations):
+`SessionRuntime.RunTurnAsync` runs the agentic loop (bounded at 90 iterations):
 stream from the provider → emit chunks to the `IEventSink` → if the model returned no
 tool calls, persist and return; otherwise run the tool batch and loop. Two things to
 know when touching it:
@@ -59,8 +59,10 @@ know when touching it:
 - **Streaming tool calls are reassembled by id.** A provider splits one tool call
   across many SSE chunks (`ToolCallDelta`); the runtime buffers argument fragments per
   id and emits one complete `ToolCall` when the stream ends.
-- **`DoomLoopDetector`** breaks the loop if the *identical* tool-call batch (names +
-  canonicalized JSON args) repeats 3× in a row, surfacing `TurnResult.DoomLoopDetected`.
+- **`DoomLoopDetector`** trips when the *identical* tool-call batch (names +
+  canonicalized JSON args) repeats 3× in a row; `SessionRuntime` then suppresses the
+  repeat and re-prompts the model up to `DoomRecoveryBudget` (3) times before halting
+  the turn, surfacing `TurnResult.DoomLoopDetected`.
 
 ### Tool execution: two layers, strict contracts
 

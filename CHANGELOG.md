@@ -45,6 +45,14 @@ All notable changes to FreeAgent are recorded here. The format follows
 - Host `Ctrl+C` handler no longer races the per-turn cleanup into an
   `ObjectDisposedException` (atomic clear-then-dispose + guarded `Cancel`).
 
+### Changed
+
+- Doom-loop handling is now a bounded recovery: after the guard trips, the model is
+  re-prompted (with the repeat suppressed) up to `DoomRecoveryBudget` (3) times, then
+  the turn halts instead of re-prompting toward the iteration ceiling.
+- Per-turn `MaxIterations` lowered from 1000 to **90** (matching the Hermes Agent
+  default) as the hard ceiling on a stuck turn.
+
 ### Notes
 
-- Whole solution builds clean with warnings-as-errors; 141 kernel tests pass.
+- Whole solution builds clean with warnings-as-errors; 142 kernel tests pass.

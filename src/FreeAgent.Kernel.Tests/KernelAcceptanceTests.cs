@@ -80,6 +80,26 @@ public sealed class KernelAcceptanceTests
     }
 
     [Fact]
+    public async Task DoomLoopHaltsTheTurnAfterRecoveryBudgetIsExhausted()
+    {
+        // The model never recovers: it is re-prompted 3 times (budget) and then the turn halts on
+        // the 4th trip. Two executions happen before detection; none after.
+        var batch = StreamScript.ToolCall("same", "echo", "{\"value\":\"x\"}");
+        var harness = KernelHarness.Create(batch, batch, batch, batch, batch, batch, StreamScript.Text("unreached"));
+        var tool = new FakeTool("echo", _ => ToolResult.Success("x"));
+        harness.Registry.Register(tool);
+
+        var result = await harness.Runtime.RunTurnAsync("loop", CancellationToken.None);
+
+        result.DoomLoopDetected.Should().BeTrue();
+        result.FinalText.Should().BeEmpty();
+        harness.Provider.Requests.Should().HaveCount(6); // 2 executed + 3 re-prompts + 1 halting trip
+        tool.ExecutionCount.Should().Be(2);
+        harness.State.Messages.Should().Contain(m =>
+            m.Role == MessageRole.Assistant && m.Content.Contains("Halting", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public async Task MalformedToolCallArgumentsDoNotCrashTheTurn()
     {
         // Empty/truncated accumulated arguments must not throw out of the doom-loop signature step;

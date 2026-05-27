@@ -111,7 +111,7 @@ needs `OPENAI_BASE_URL=http://localhost:<port>/v1` and any non-empty `OPENAI_API
 ## How a turn works
 
 One user message drives `SessionRuntime.RunTurnAsync`, which runs an
-agentic loop (bounded at 1000 iterations) until the model produces a reply with no
+agentic loop (bounded at 90 iterations) until the model produces a reply with no
 tool calls:
 
 ```
@@ -142,9 +142,10 @@ complete `ToolCall` per id once the stream ends.
 **Doom-loop detection.** If the model emits the *identical* tool-call batch (same
 names + canonicalized JSON args) three times running, the runtime stops executing
 that batch and re-prompts the model — injecting a notice into the transcript so it
-can change course — rather than running the repeat. Every further identical batch is
-likewise suppressed; the hard ceiling on a genuinely stuck turn is the 1000-iteration
-loop bound. The result carries `DoomLoopDetected = true`.
+can change course — rather than running the repeat. It allows up to **3 such
+recovery re-prompts**; if the model is still looping after that, the turn **halts**.
+A genuinely stuck turn that somehow escapes the guard is ultimately bounded by the
+90-iteration loop cap. The result carries `DoomLoopDetected = true`.
 
 **Concurrency contract (`TurnExecutor`).** Within a single batch:
 
