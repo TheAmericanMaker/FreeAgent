@@ -12,6 +12,10 @@ namespace FreeAgent.Kernel;
 public sealed class WriteFileTool : ITool
 {
     public string Name => "WriteFile";
+    public string Description =>
+        "Write UTF-8 text to a workspace file, creating any missing parent directories and overwriting "
+        + "an existing file. Use this to create or replace a file's full contents. Takes 'path' "
+        + "(absolute, or relative to the working directory) and 'content'.";
     public bool IsReadOnly => false;
     public bool IsConcurrencySafe => false;
 

@@ -22,6 +22,10 @@ public sealed class ProcessExecTool : ITool
     public ProcessExecTool(TimeSpan? timeout = null) => _timeout = timeout ?? DefaultTimeout;
 
     public string Name => "ProcessExec";
+    public string Description =>
+        "Run an external command in the workspace and return its exit code, stdout, and stderr. Use "
+        + "for builds, tests, git, and other shell tools. Takes 'command' (the binary) and optional "
+        + "'args' (array). Times out after 30s. Some binaries are blocked and others require approval.";
     public bool IsReadOnly => false;
     public bool IsConcurrencySafe => false;
 

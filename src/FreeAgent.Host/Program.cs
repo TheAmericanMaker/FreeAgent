@@ -33,6 +33,8 @@ public static class Program
         registry.Register(new ReadFileTool());
         registry.Register(new WriteFileTool());
         registry.Register(new ProcessExecTool());
+        registry.Register(new GlobTool());
+        registry.Register(new GrepTool());
 
         // ── session state ────────────────────────────────────────
         var sessionId = Guid.NewGuid().ToString()[..8];

@@ -284,6 +284,8 @@ public sealed class OpenAIProvider : IProvider, IDisposable
         writer.WritePropertyName("function");
         writer.WriteStartObject();
         writer.WriteString("name", tool.Name);
+        if (!string.IsNullOrEmpty(tool.Description))
+            writer.WriteString("description", tool.Description);
         writer.WritePropertyName("parameters");
         tool.InputSchema.WriteTo(writer);
         writer.WriteEndObject();

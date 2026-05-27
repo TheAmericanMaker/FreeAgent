@@ -38,7 +38,7 @@ public class OpenAIProviderTests : IDisposable
     private static ProviderRequest StubRequest()
     {
         var msg = new Message(MessageRole.User, "Hello");
-        var tool = new ToolDefinition("test_tool", JsonDocument.Parse("{}"), true, true);
+        var tool = new ToolDefinition("test_tool", "a test tool", JsonDocument.Parse("{}"), true, true);
         return new ProviderRequest([msg], [tool]);
     }
 
@@ -166,6 +166,24 @@ public class OpenAIProviderTests : IDisposable
 
         chunks.Where(c => !string.IsNullOrEmpty(c.TextDelta)).Select(c => c.TextDelta)
             .Should().Equal("spaceless");
+    }
+
+    [Fact]
+    public async Task ToolDescription_SerializedAsFunctionDescription()
+    {
+        WireResponse("""
+            data: {"id":"1","choices":[{"index":0,"delta":{}}]}
+            data: [DONE]
+
+            """);
+
+        _provider = new OpenAIProvider(_httpClient, "https://api.openai.com/v1/");
+
+        var tool = new ToolDefinition("ReadFile", "Read a UTF-8 text file.", JsonDocument.Parse("{}"), true, true);
+        var req = new ProviderRequest([new Message(MessageRole.User, "hi")], [tool]);
+        var _ = await _provider.StreamChatAsync(req, default).ToListAsync();
+
+        _handler.LastBody.Should().Contain("\"description\":\"Read a UTF-8 text file.\"");
     }
 
     [Fact]
@@ -310,7 +328,7 @@ public class OpenAIProviderTests : IDisposable
         _provider = new OpenAIProvider(_httpClient, "https://api.openai.com/v1/");
 
         var msg = new Message(MessageRole.User, "test");
-        var tool = new ToolDefinition("tool", JsonDocument.Parse("{}"), true, true);
+        var tool = new ToolDefinition("tool", "does a thing", JsonDocument.Parse("{}"), true, true);
         var req = new ProviderRequest([msg], [tool]);
 
         var _ = await _provider.StreamChatAsync(req, default).ToListAsync();
