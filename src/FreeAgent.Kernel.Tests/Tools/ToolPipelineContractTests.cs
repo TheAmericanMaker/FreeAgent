@@ -35,6 +35,18 @@ public sealed class ToolPipelineContractTests
     }
 
     [Fact]
+    public void PlanModeBlockedIsAnErrorWithTheMandatedMessageAndRecoveryHint()
+    {
+        var result = ToolResult.PlanModeBlocked("FileWrite");
+
+        result.IsError.Should().BeTrue();
+        result.Kind.Should().Be(ToolResultKind.PlanModeBlocked);
+        result.Content.Should().Be(
+            "Plan mode is active — only read-only tools are allowed. Call ExitPlanMode first to make changes with FileWrite.");
+        result.RetryHint.Should().Be("Call ExitPlanMode first to make changes with FileWrite.");
+    }
+
+    [Fact]
     public void StateConflictIsAnErrorAndPreservesRetryHint()
     {
         var result = ToolResult.StateConflict("stale", retryHint: "re-read then retry");
@@ -202,6 +214,85 @@ public sealed class ToolPipelineContractTests
         pipeline.StepLog.Should().Equal(
             "parse", "schema-validate", "sanity-check", "plan-mode-guard", "permission", "cache-lookup",
             "pre-hook", "execute", "post-hook", "artifact-store", "cache-write", "invalidate");
+    }
+
+    // ── Plan-mode guard (pipeline step 4) ────────────────────────────────────
+
+    private static SessionState PlanModeState()
+    {
+        var state = NewState();
+        state.PlanMode = true;
+        return state;
+    }
+
+    // L. In plan mode a non-read-only tool is blocked at step 4, before permission and execute.
+    [Fact]
+    public async Task PlanModeBlocksNonReadOnlyToolBeforePermissionAndExecute()
+    {
+        var registry = new ToolRegistry();
+        var tool = new FakeTool("writer", _ => ToolResult.Success("should-not-run"), isReadOnly: false);
+        registry.Register(tool);
+        var perms = RecordingPermissionEngine.Allowing();
+        var pipeline = new ToolPipeline(registry, perms);
+
+        var result = await pipeline.ExecuteAsync(Call("writer", "{}"), PlanModeState(), CancellationToken.None);
+
+        result.Kind.Should().Be(ToolResultKind.PlanModeBlocked);
+        result.IsError.Should().BeTrue();
+        tool.ExecutionCount.Should().Be(0);
+        perms.DecideCallCount.Should().Be(0);
+        pipeline.StepLog.Should().Equal("parse", "schema-validate", "sanity-check", "plan-mode-guard");
+        pipeline.StepLog.Should().NotContain("permission");
+        pipeline.StepLog.Should().NotContain("execute");
+    }
+
+    // M. The blocked result carries the exact mandated message, naming the offending tool.
+    [Fact]
+    public async Task PlanModeBlockReturnsTheExactMandatedMessage()
+    {
+        var registry = new ToolRegistry();
+        registry.Register(new FakeTool("FileWrite", _ => ToolResult.Success("should-not-run"), isReadOnly: false));
+        var pipeline = new ToolPipeline(registry, RecordingPermissionEngine.Allowing());
+
+        var result = await pipeline.ExecuteAsync(Call("FileWrite", "{}"), PlanModeState(), CancellationToken.None);
+
+        result.Content.Should().Be(
+            "Plan mode is active — only read-only tools are allowed. Call ExitPlanMode first to make changes with FileWrite.");
+    }
+
+    // N. In plan mode a read-only tool is unaffected and runs all 12 steps.
+    [Fact]
+    public async Task PlanModeAllowsReadOnlyToolToExecuteAllTwelveSteps()
+    {
+        var registry = new ToolRegistry();
+        var tool = new FakeTool("reader", _ => ToolResult.Success("data"), isReadOnly: true);
+        registry.Register(tool);
+        var pipeline = new ToolPipeline(registry, RecordingPermissionEngine.Allowing());
+
+        var result = await pipeline.ExecuteAsync(Call("reader", "{}"), PlanModeState(), CancellationToken.None);
+
+        result.Kind.Should().Be(ToolResultKind.Success);
+        result.Content.Should().Be("data");
+        tool.ExecutionCount.Should().Be(1);
+        pipeline.StepLog.Should().Equal(
+            "parse", "schema-validate", "sanity-check", "plan-mode-guard", "permission", "cache-lookup",
+            "pre-hook", "execute", "post-hook", "artifact-store", "cache-write", "invalidate");
+    }
+
+    // O. With plan mode off (the default) a non-read-only tool is not blocked by the guard.
+    [Fact]
+    public async Task PlanModeOffDoesNotBlockNonReadOnlyTool()
+    {
+        var registry = new ToolRegistry();
+        var tool = new FakeTool("writer", _ => ToolResult.Success("wrote"), isReadOnly: false);
+        registry.Register(tool);
+        var pipeline = new ToolPipeline(registry, RecordingPermissionEngine.Allowing());
+
+        var result = await pipeline.ExecuteAsync(Call("writer", "{}"), NewState(), CancellationToken.None);
+
+        result.Kind.Should().Be(ToolResultKind.Success);
+        tool.ExecutionCount.Should().Be(1);
+        pipeline.StepLog.Should().Contain("execute");
     }
 
     // ── Schema validation (pipeline step 2) ──────────────────────────────────
