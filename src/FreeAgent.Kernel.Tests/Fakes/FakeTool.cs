@@ -5,12 +5,29 @@ namespace FreeAgent.Kernel.Tests;
 
 public sealed class FakeTool : ITool
 {
-    private readonly Func<JsonDocument, ToolResult> _execute;
+    private readonly Func<JsonDocument, ToolContext, CancellationToken, ValueTask<ToolResult>> _execute;
     private readonly Func<JsonDocument, ToolContext, IReadOnlyList<Capability>> _capabilities;
 
     public FakeTool(
         string name,
         Func<JsonDocument, ToolResult> execute,
+        bool isReadOnly = false,
+        bool isConcurrencySafe = false,
+        Func<JsonDocument, ToolContext, IReadOnlyList<Capability>>? capabilities = null,
+        string schemaJson = "{}")
+        : this(
+            name,
+            (arguments, _, _) => ValueTask.FromResult(execute(arguments)),
+            isReadOnly,
+            isConcurrencySafe,
+            capabilities,
+            schemaJson)
+    {
+    }
+
+    public FakeTool(
+        string name,
+        Func<JsonDocument, ToolContext, CancellationToken, ValueTask<ToolResult>> execute,
         bool isReadOnly = false,
         bool isConcurrencySafe = false,
         Func<JsonDocument, ToolContext, IReadOnlyList<Capability>>? capabilities = null,
@@ -36,6 +53,6 @@ public sealed class FakeTool : ITool
     public ValueTask<ToolResult> ExecuteAsync(JsonDocument arguments, ToolContext context, CancellationToken cancellationToken)
     {
         ExecutionCount++;
-        return ValueTask.FromResult(_execute(arguments));
+        return _execute(arguments, context, cancellationToken);
     }
 }

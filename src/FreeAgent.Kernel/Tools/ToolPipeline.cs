@@ -14,6 +14,7 @@ public sealed class ToolPipeline
 {
     private readonly IToolRegistry _registry;
     private readonly IPermissionEngine _permissions;
+    private readonly object _stepLogGate = new();
 
     /// <summary>Ordered record of the conceptual steps reached during the last call(s).</summary>
     public List<string> StepLog { get; } = [];
@@ -27,7 +28,7 @@ public sealed class ToolPipeline
     public async ValueTask<ToolResult> ExecuteAsync(ToolCall call, SessionState state, CancellationToken cancellationToken)
     {
         // Step 1 — parse. Invalid JSON must not escape as an exception.
-        StepLog.Add("parse");
+        AddStep("parse");
         JsonDocument arguments;
         try
         {
@@ -44,7 +45,7 @@ public sealed class ToolPipeline
             // here; an unknown tool is an input error and must short-circuit before permission.
             // Arguments are then validated against the tool's declared input schema. A schema
             // failure stops before capabilities are gathered or any side effect occurs.
-            StepLog.Add("schema-validate");
+            AddStep("schema-validate");
             var tool = _registry.Find(call.Name);
             if (tool is null)
             {
@@ -60,14 +61,14 @@ public sealed class ToolPipeline
             var context = new ToolContext(state);
 
             // Step 3 — sanity-check (path-escape / workspace boundary). Future seam.
-            StepLog.Add("sanity-check");
+            AddStep("sanity-check");
 
             // Step 4 — plan-mode-guard (block non-read-only tools in plan mode). Future seam.
-            StepLog.Add("plan-mode-guard");
+            AddStep("plan-mode-guard");
 
             // Step 5 — permission. Gather the tool's required capabilities and let the engine
             // decide; an uncovered, denied, or blocked capability stops here before any side effect.
-            StepLog.Add("permission");
+            AddStep("permission");
             var capabilities = tool.RequiredCapabilities(arguments, context);
             var decision = _permissions.Decide(tool, capabilities, state.WorkingDirectory);
             if (!decision.Allowed)
@@ -76,14 +77,14 @@ public sealed class ToolPipeline
             }
 
             // Step 6 — cache-lookup (read-only tools only). Future seam; a miss is not a failure.
-            StepLog.Add("cache-lookup");
+            AddStep("cache-lookup");
 
             // Step 7 — pre-hook. Future seam; non-fatal.
-            StepLog.Add("pre-hook");
+            AddStep("pre-hook");
 
             // Step 8 — execute. Cancellation and crashes are mapped to result classes here;
             // an exception never escapes the pipeline.
-            StepLog.Add("execute");
+            AddStep("execute");
             ToolResult result;
             try
             {
@@ -101,16 +102,16 @@ public sealed class ToolPipeline
             }
 
             // Step 9 — post-hook. Future seam; non-fatal, result not modified.
-            StepLog.Add("post-hook");
+            AddStep("post-hook");
 
             // Step 10 — artifact-store (large Success previews). Future seam.
-            StepLog.Add("artifact-store");
+            AddStep("artifact-store");
 
             // Step 11 — cache-write (read-only Success only). Future seam.
-            StepLog.Add("cache-write");
+            AddStep("cache-write");
 
             // Step 12 — invalidate (after mutating tools). Future seam.
-            StepLog.Add("invalidate");
+            AddStep("invalidate");
 
             // A tool that succeeds but returns no content is reported as Empty so the model
             // gets a distinct, non-Success signal rather than a blank Success.
@@ -120,6 +121,14 @@ public sealed class ToolPipeline
             }
 
             return result;
+        }
+    }
+
+    private void AddStep(string step)
+    {
+        lock (_stepLogGate)
+        {
+            StepLog.Add(step);
         }
     }
 }

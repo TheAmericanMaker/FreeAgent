@@ -4,7 +4,7 @@ Linux-native, modular agent kernel reimplementation work extracted from the Open
 
 The implementation contract lives at:
 
-- `.codecarto/findings/reimplementation-spec/reimplementation-spec.md`
+- `docs/codecarto/reimplementation-spec.md`
 
 Current scope:
 

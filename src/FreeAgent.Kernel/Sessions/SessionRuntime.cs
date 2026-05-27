@@ -7,7 +7,7 @@ public sealed class SessionRuntime
     private const int MaxIterations = 1000;
     private readonly IProvider _provider;
     private readonly IToolRegistry _tools;
-    private readonly ToolPipeline _pipeline;
+    private readonly TurnExecutor _turnExecutor;
     private readonly IPersistenceStore _store;
     private readonly IEventSink _events;
     private readonly SessionState _state;
@@ -23,7 +23,7 @@ public sealed class SessionRuntime
     {
         _provider = provider;
         _tools = tools;
-        _pipeline = pipeline;
+        _turnExecutor = new TurnExecutor(tools, pipeline);
         _store = store;
         _events = events;
         _state = state;
@@ -82,9 +82,11 @@ public sealed class SessionRuntime
             }
 
             _state.Messages.Add(new Message(MessageRole.Assistant, text.ToString(), calls.ToArray()));
-            foreach (var call in calls)
+            var results = await _turnExecutor.ExecuteBatchAsync(calls, _state, cancellationToken);
+            for (var resultIndex = 0; resultIndex < calls.Count; resultIndex++)
             {
-                var result = await _pipeline.ExecuteAsync(call, _state, cancellationToken);
+                var call = calls[resultIndex];
+                var result = results[resultIndex];
                 _state.Messages.Add(new Message(MessageRole.Tool, result.Content, ToolCallId: call.Id, ToolName: call.Name));
             }
         }
