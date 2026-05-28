@@ -60,6 +60,7 @@ public static class Program
         registry.Register(new ReadFileTool());
         registry.Register(new WriteFileTool());
         registry.Register(new EditFileTool());
+        registry.Register(new MultiEditFileTool());
         registry.Register(new ProcessExecTool());
         registry.Register(new GlobTool());
         registry.Register(new GrepTool());

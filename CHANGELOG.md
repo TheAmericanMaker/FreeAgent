@@ -54,6 +54,9 @@ All notable changes to FreeAgent are recorded here. The format follows
   by default (precise edits) and an opt-in `replace_all`. Use this rather than `WriteFile` for
   changes to existing files: it preserves untouched content and is far cheaper in tokens. Required
   capability: `FileWriteCap` on the resolved path.
+- **`MultiEditFile` tool** — atomic batch of literal-string edits on one file. Each edit obeys the
+  same unique-match safety as `EditFile`; any failure aborts the batch *without writing*. Sequential
+  edits see each other's intermediate state (so chains compose). One snapshot is taken for `/undo`.
 
 ### Added — robustness
 

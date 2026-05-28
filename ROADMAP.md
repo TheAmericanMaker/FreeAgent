@@ -75,8 +75,9 @@ see below.)
   — each spawn requires approval or an allow rule). Four default roles registered in the host:
   **Explore**, **Plan**, **Coder**, **Verify**.
 - [x] **Richer editing tools** — `EditFile` (literal string-replace with unique-match safety;
-  `replace_all` opt-in) done. Remaining: **MultiEdit** (atomic batch of edits per file),
-  **ApplyPatch** (unified diff), **colored diff view** for writes.
+  `replace_all` opt-in) and `MultiEditFile` (atomic batch of edits per file, with the same
+  unique-match safety, single snapshot for `/undo`) done. Remaining: **ApplyPatch** (unified diff
+  application) and a **colored diff view** for writes.
 - [x] **System-prompt assembly** — done: base instructions (overridable file) + working directory +
   git branch (read directly from `.git/HEAD`, no subprocess) + a project context file
   (`CLAUDE.md` / `AGENTS.md` / `FREEAGENT.md`, first found, content appended). Cross-session
