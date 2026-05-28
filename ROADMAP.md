@@ -115,8 +115,14 @@ Phasing (the kernel is *already* effectively headless — `SessionRuntime` + `IE
 
 ## On the horizon — integrations & ecosystem
 
-- [ ] **MCP client** — discover, add, and configure MCP servers; register their tools as
-  `mcp__server__tool`.
+- [x] **MCP client** — `IMcpTransport` seam, `JsonRpcClient` (JSON-RPC 2.0 over line-delimited
+  JSON), `McpClient` (`initialize` + `notifications/initialized` + `tools/list` + `tools/call`),
+  `StdioMcpTransport` for child-process servers, `McpServerManager` that spawns each configured
+  server at host startup and registers its remote tools as `mcp__{server}__{tool}` via
+  `McpToolAdapter` (the adapter requires a `ProcessExecCap("mcp:{server}", ...)` so a whole
+  server can be allow- or deny-ruled). Configured via `mcp.servers[]` in `.freeagent/config.json`.
+  Integration smoke test is `[Skip]`'d due to a runner interaction with background-loop disposal
+  across test classes; passes in isolation. End-to-end with real MCP servers untested.
 - [ ] **LSP client** — language-server-backed `hover` / `definition` / `references` /
   `diagnostics`.
 - [ ] **Roslyn tool** — C# semantic analysis (overview, find-references, callers,

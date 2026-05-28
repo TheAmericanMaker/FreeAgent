@@ -82,6 +82,11 @@ public static class Program
         registry.Register(new WriteMemoryTool());
         registry.Register(new ReadArtifactTool(artifactStore));
 
+        // MCP servers (if any) — spawn each, discover tools, register them as mcp__name__tool.
+        var mcpManager = new McpServerManager();
+        if (projectConfig?.Mcp?.Servers is { Count: > 0 } mcpServers)
+            await mcpManager.StartAsync(mcpServers, registry, default);
+
         // Sub-agents — restricted-tool roles that the main agent can spawn for sub-tasks.
         var agents = new AgentRegistry();
         agents.Register(new AgentDefinition(

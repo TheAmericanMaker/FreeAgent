@@ -34,6 +34,9 @@ public sealed class PermissionConfig
     /// <summary>Optional pre-tool / post-tool hooks (the class is also the umbrella for project-level config beyond permissions).</summary>
     [JsonPropertyName("hooks")] public HooksConfig? Hooks { get; init; }
 
+    /// <summary>Optional MCP server configuration — servers to spawn at host startup.</summary>
+    [JsonPropertyName("mcp")] public McpConfig? Mcp { get; init; }
+
     public sealed record CapabilityRuleConfig(string Capability, string? Pattern = null);
 
     /// <summary>Parses and validates a config document. Throws <see cref="JsonException"/> on malformed
