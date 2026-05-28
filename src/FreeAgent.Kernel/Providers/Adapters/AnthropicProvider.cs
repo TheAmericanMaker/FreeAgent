@@ -99,6 +99,8 @@ public sealed class AnthropicProvider : IProvider, IDisposable
 
         // Per content_block index → tool-use id/name (set at content_block_start; used by input_json_delta).
         var toolUseByIndex = new Dictionary<int, (string Id, string Name)>();
+        // stop_reason arrives ahead of message_stop; latch it so we can attach it to the final chunk.
+        var finalStopReason = StopReason.Unknown;
 
         while (await reader.ReadLineAsync(cancellationToken) is { } line)
         {
@@ -171,10 +173,25 @@ public sealed class AnthropicProvider : IProvider, IDisposable
                     {
                         yield return new StreamChunk(Usage: u2);
                     }
+                    // Anthropic emits stop_reason on message_delta, ahead of the message_stop event.
+                    if (root.TryGetProperty("delta", out var msgDelta)
+                        && msgDelta.TryGetProperty("stop_reason", out var srProp)
+                        && srProp.GetString() is { Length: > 0 } sr)
+                    {
+                        finalStopReason = sr switch
+                        {
+                            "end_turn" => StopReason.EndTurn,
+                            "tool_use" => StopReason.ToolUse,
+                            "max_tokens" => StopReason.MaxTokens,
+                            "stop_sequence" => StopReason.StopSequence,
+                            "refusal" => StopReason.Refusal,
+                            _ => StopReason.Unknown,
+                        };
+                    }
                     break;
 
                 case "message_stop":
-                    yield return new StreamChunk(IsComplete: true);
+                    yield return new StreamChunk(IsComplete: true, StopReason: finalStopReason);
                     break;
 
                 // Ignore "content_block_stop", "ping", and any future event types.
@@ -182,7 +199,7 @@ public sealed class AnthropicProvider : IProvider, IDisposable
         }
 
         // Final sentinel in case the stream ended without a message_stop.
-        yield return new StreamChunk(IsComplete: true);
+        yield return new StreamChunk(IsComplete: true, StopReason: finalStopReason);
     }
 
     private string BuildRequestBody(ProviderRequest request)

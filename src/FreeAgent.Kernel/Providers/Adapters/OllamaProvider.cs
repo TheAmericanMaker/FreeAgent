@@ -124,7 +124,19 @@ public sealed class OllamaProvider : IProvider, IDisposable
                     var output = root.TryGetProperty("eval_count", out var ec) && ec.ValueKind == JsonValueKind.Number ? ec.GetInt32() : 0;
                     if (input > 0 || output > 0)
                         yield return new StreamChunk(Usage: new Usage(input, output));
-                    yield return new StreamChunk(IsComplete: true);
+
+                    // Ollama optionally emits `done_reason` ("stop" | "length" | "load" | …). When
+                    // present, map to the normalized StopReason so consumers don't need to know
+                    // provider-specific wording.
+                    var stopReason = root.TryGetProperty("done_reason", out var dr) && dr.GetString() is { Length: > 0 } drs
+                        ? drs switch
+                        {
+                            "stop" => StopReason.EndTurn,
+                            "length" => StopReason.MaxTokens,
+                            _ => StopReason.Unknown,
+                        }
+                        : StopReason.Unknown;
+                    yield return new StreamChunk(IsComplete: true, StopReason: stopReason);
                     sawComplete = true;
                 }
             }

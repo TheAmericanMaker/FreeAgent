@@ -247,6 +247,24 @@ public sealed class AnthropicProviderTests : IDisposable
         _handler.LastBody.Should().Contain("\"max_tokens\":16384");
     }
 
+    [Theory]
+    [InlineData("end_turn", StopReason.EndTurn)]
+    [InlineData("tool_use", StopReason.ToolUse)]
+    [InlineData("max_tokens", StopReason.MaxTokens)]
+    [InlineData("stop_sequence", StopReason.StopSequence)]
+    [InlineData("refusal", StopReason.Refusal)]
+    public async Task MapsAnthropicStopReasonToNormalizedStopReason(string anthropicReason, StopReason expected)
+    {
+        WireResponse(
+            $"data: {{\"type\":\"message_delta\",\"delta\":{{\"stop_reason\":\"{anthropicReason}\"}}}}\n\n" +
+            "data: {\"type\":\"message_stop\"}\n\n");
+        _provider = NewProvider();
+
+        var chunks = await _provider.StreamChatAsync(StubRequest(), default).ToListAsync();
+
+        chunks.Should().Contain(c => c.IsComplete && c.StopReason == expected);
+    }
+
     [Fact]
     public async Task NoTools_OmitsToolsProperty()
     {

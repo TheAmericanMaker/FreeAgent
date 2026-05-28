@@ -45,15 +45,17 @@ see below.)
 
 ## Coming next — larger features
 
-- [ ] **More providers + provider-model scaffolding** — *Anthropic, Azure OpenAI done (see
-  Done).* Remaining: Bedrock, Vertex, Groq (Groq is pure OpenAI-compat — just set
-  `OPENAI_BASE_URL=https://api.groq.com/openai/v1`); plus the scaffolding the single
-  `StreamChatAsync` seam still lacks (pi-mono pattern): a first-class **`Model` metadata
-  record** (id / wire-API / baseUrl / context window / max tokens / cost / reasoning) on
-  `ProviderRequest`; **per-model compat flags** to absorb OpenAI-compatible variants without
-  forking the adapter; typed **request options** + a provider-agnostic **`StopReason`**; and a
-  formal provider **registry keyed by wire-API** rather than by vendor, with a separate model
-  registry.
+- [ ] **More providers** — Anthropic, Azure OpenAI, Ollama done. Groq works via OpenAI-compat
+  (`OPENAI_BASE_URL=https://api.groq.com/openai/v1`, recipe in `docs/usage.md`). Remaining:
+  **Bedrock** (needs AWS SigV4) and **Vertex** (needs Google service-account auth).
+- [x] **Provider-model scaffolding** — first-class `Model` metadata record (id, wire API, context
+  window, default max-output, supports tools/vision/thinking flags); `StopReason` enum
+  (`EndTurn`/`ToolUse`/`MaxTokens`/`StopSequence`/`Refusal`/`Unknown`) carried on every
+  `StreamChunk`; per-provider mapping from the wire-specific finish/stop-reason string into
+  `StopReason` (OpenAI/Azure/Anthropic/Ollama); `ModelCatalog` keyed by `wire-api/id` for
+  registration + lookup, with built-in defaults for the major models. Per-model compat flags +
+  typed request options remain a follow-up — every provider currently accepts a single
+  `ProviderRequest` shape and that's still sufficient.
 - [x] **Context-window management** — per-turn input-token tracking in `SessionState`, configurable
   `ContextWindow` (env `FREE_CONTEXT_TOKENS`), and pre-turn **turn-aware compaction** that drops
   older `User → Assistant → Tool` blocks (preserving `tool_use` / `tool_result` pairings and the

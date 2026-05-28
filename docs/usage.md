@@ -51,7 +51,7 @@ Any server that speaks the OpenAI streaming `/chat/completions` shape works. Set
 base URL to its `/v1` root and the model to whatever it serves:
 
 ```bash
-# A local model server
+# A local model server (llama-server, vLLM, etc.)
 export OPENAI_BASE_URL=http://localhost:8000/v1
 export OPENAI_API_KEY=not-needed-but-required   # any non-empty value
 export FREEMODEL=your-local-model
@@ -60,6 +60,59 @@ export FREEMODEL=your-local-model
 export OPENAI_BASE_URL=https://your-gateway.example/v1
 export OPENAI_API_KEY=sk-...
 export FREEMODEL=some/model
+```
+
+#### Groq
+
+Groq's API is OpenAI-compatible — no special provider needed:
+
+```bash
+export OPENAI_BASE_URL=https://api.groq.com/openai/v1
+export OPENAI_API_KEY=gsk_...
+export FREEMODEL=llama-3.3-70b-versatile   # or any model Groq currently serves
+freeagent
+```
+
+#### Ollama (OpenAI-compat path)
+
+```bash
+export OPENAI_BASE_URL=http://localhost:11434/v1
+export OPENAI_API_KEY=ollama                # Ollama ignores the key but the host requires non-empty
+export FREEMODEL=qwen2.5-coder
+freeagent
+```
+
+Or use the native Ollama provider, which speaks Ollama's `/api/chat` (newline-delimited JSON)
+directly and lets you tune `num_ctx` / `temperature` per request:
+
+```bash
+export FREEPROVIDER=ollama
+export OLLAMA_HOST=http://localhost:11434    # default
+export FREEMODEL=qwen2.5-coder
+export FREE_NUM_CTX=8192                     # optional
+export FREE_TEMPERATURE=0.2                  # optional
+freeagent
+```
+
+#### Anthropic (native)
+
+```bash
+export FREEPROVIDER=anthropic
+export ANTHROPIC_API_KEY=sk-ant-...
+export FREEMODEL=claude-3-7-sonnet-latest
+export FREE_THINKING_BUDGET=4096             # optional: enable extended thinking
+freeagent
+```
+
+#### Azure OpenAI
+
+```bash
+export FREEPROVIDER=azure
+export AZURE_OPENAI_API_KEY=...
+export AZURE_OPENAI_ENDPOINT=https://my-resource.openai.azure.com
+export AZURE_OPENAI_DEPLOYMENT=my-gpt-4o-mini-deployment
+export AZURE_OPENAI_API_VERSION=2024-08-01-preview   # optional
+freeagent
 ```
 
 ## At the prompt

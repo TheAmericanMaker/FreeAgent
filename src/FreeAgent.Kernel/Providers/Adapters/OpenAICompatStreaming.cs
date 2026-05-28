@@ -92,12 +92,21 @@ internal static class OpenAICompatStreaming
 
             var choice = choices[0];
             bool isComplete = false;
+            var stopReason = StopReason.Unknown;
 
             if (choice.TryGetProperty("finish_reason", out var fr)
                 && fr.ValueKind != JsonValueKind.Null
-                && !string.IsNullOrEmpty(fr.GetString()))
+                && fr.GetString() is { Length: > 0 } finishReason)
             {
                 isComplete = true;
+                stopReason = finishReason switch
+                {
+                    "stop" => StopReason.EndTurn,
+                    "length" => StopReason.MaxTokens,
+                    "tool_calls" or "function_call" => StopReason.ToolUse,
+                    "content_filter" => StopReason.Refusal,
+                    _ => StopReason.Unknown,
+                };
             }
 
             if (choice.TryGetProperty("delta", out var delta))
@@ -108,7 +117,7 @@ internal static class OpenAICompatStreaming
                     && reasoningProp.ValueKind == JsonValueKind.String
                     && reasoningProp.GetString() is { Length: > 0 } reasoning)
                 {
-                    yield return new StreamChunk(reasoning, null, null, null, isComplete);
+                    yield return new StreamChunk(reasoning, null, null, null, isComplete, stopReason);
                 }
 
                 // Text delta
@@ -118,11 +127,11 @@ internal static class OpenAICompatStreaming
                     var text = contentProp.GetString() ?? string.Empty;
                     if (!string.IsNullOrEmpty(text))
                     {
-                        yield return new StreamChunk(null, text, null, null, isComplete);
+                        yield return new StreamChunk(null, text, null, null, isComplete, stopReason);
                     }
                     else if (isComplete)
                     {
-                        yield return new StreamChunk(null, null, null, null, true);
+                        yield return new StreamChunk(null, null, null, null, true, stopReason);
                     }
                 }
 
@@ -161,13 +170,13 @@ internal static class OpenAICompatStreaming
                                 args = argsProp.GetString() ?? string.Empty;
                         }
 
-                        yield return new StreamChunk(null, null, new ToolCallDelta(id, name, args), null, isComplete);
+                        yield return new StreamChunk(null, null, new ToolCallDelta(id, name, args), null, isComplete, stopReason);
                     }
                 }
             }
             else if (isComplete)
             {
-                yield return new StreamChunk(null, null, null, null, true);
+                yield return new StreamChunk(null, null, null, null, true, stopReason);
             }
         }
 

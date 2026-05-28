@@ -239,6 +239,26 @@ public class OpenAIProviderTests : IDisposable
         chunks.Any(c => c.IsComplete).Should().BeTrue();
     }
 
+    [Theory]
+    [InlineData("stop", StopReason.EndTurn)]
+    [InlineData("length", StopReason.MaxTokens)]
+    [InlineData("tool_calls", StopReason.ToolUse)]
+    [InlineData("function_call", StopReason.ToolUse)]
+    [InlineData("content_filter", StopReason.Refusal)]
+    public async Task FinishReason_MapsToNormalizedStopReason(string finishReason, StopReason expected)
+    {
+        WireResponse(
+            "data: {\"id\":\"x\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"done\"},\"finish_reason\":\""
+            + finishReason + "\"}]}\n"
+            + "data: [DONE]\n\n");
+
+        _provider = new OpenAIProvider(_httpClient, "https://api.openai.com/v1/");
+
+        var chunks = await _provider.StreamChatAsync(StubRequest(), default).ToListAsync();
+
+        chunks.Should().Contain(c => c.IsComplete && c.StopReason == expected);
+    }
+
     [Fact]
     public async Task EmptyContentEvents_Skipped()
     {

@@ -6,6 +6,29 @@ All notable changes to FreeAgent are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added — provider-model scaffolding
+
+- **`StopReason` enum** — normalized stop reason on every `StreamChunk`
+  (`EndTurn`/`ToolUse`/`MaxTokens`/`StopSequence`/`Refusal`/`Unknown`). Every provider now maps
+  its wire-specific finish/stop reason to this enum: OpenAI's `finish_reason`
+  (`stop`/`length`/`tool_calls`/`function_call`/`content_filter`), Anthropic's `stop_reason`
+  emitted on `message_delta` (`end_turn`/`tool_use`/`max_tokens`/`stop_sequence`/`refusal`), and
+  Ollama's optional `done_reason` (`stop`/`length`). Lets the runtime distinguish "model finished"
+  from "ran out of tokens" without re-parsing provider-specific wire strings.
+- **`Model` metadata record** — id, wire API, context tokens, default max-output tokens, and
+  `SupportsTools`/`SupportsVision`/`SupportsThinking` capability flags. Optional — the runtime
+  works without it; when present, lookups can size budgets and gate features.
+- **`ModelCatalog`** — `wire-api/id`-keyed registry with `Defaults()` factory carrying built-in
+  records for the major OpenAI + Anthropic models (`gpt-4o`, `gpt-4o-mini`,
+  `claude-3-7-sonnet-latest`, `claude-3-5-haiku-latest`). Additive lookup — `TryResolve` returns
+  null for unknown models without affecting behavior.
+
+### Added — Groq docs
+
+- **Groq recipe in `docs/usage.md`** — Groq is pure OpenAI-compat; documented the exact env-var
+  trio (`OPENAI_BASE_URL=https://api.groq.com/openai/v1`, `OPENAI_API_KEY`, `FREEMODEL`). Same
+  section gained native-Ollama, Anthropic, and Azure recipes for parity.
+
 ### Added — native Ollama provider
 
 - **`OllamaProvider`** — native client for Ollama's `POST /api/chat` endpoint (newline-delimited

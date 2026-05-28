@@ -106,6 +106,20 @@ public sealed class OllamaProviderTests : IDisposable
         chunks.Should().Contain(c => c.IsComplete);
     }
 
+    [Theory]
+    [InlineData("stop", StopReason.EndTurn)]
+    [InlineData("length", StopReason.MaxTokens)]
+    [InlineData("load", StopReason.Unknown)]
+    public async Task MapsDoneReasonToNormalizedStopReason(string doneReason, StopReason expected)
+    {
+        WireResponse($"{{\"message\":{{\"content\":\"hi\"}},\"done\":true,\"done_reason\":\"{doneReason}\"}}\n");
+        _provider = NewProvider();
+
+        var chunks = await _provider.StreamChatAsync(StubRequest(), default).ToListAsync();
+
+        chunks.Should().Contain(c => c.IsComplete && c.StopReason == expected);
+    }
+
     [Fact]
     public async Task EmitsSyntheticCompleteWhenStreamEndsWithoutDone()
     {
