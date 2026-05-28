@@ -147,15 +147,17 @@ Phasing (the kernel is *already* effectively headless — `SessionRuntime` + `IE
 - [ ] **Status line repositioning** — move the `Session | Model | working dir` line from the top
   to a persistent bottom status bar, with rule lines above and below the input box. *Presentation
   only; lands as part of the TUI client (above) — the current console host keeps the top line.*
-- [ ] **Local model runner (orchestrate, don't embed)** — since every local engine already speaks
-  OpenAI-compatible HTTP (llama.cpp's `llama-server`, Ollama, LocalAI, vLLM, exo, LM Studio),
-  FreeAgent should **download a model + launch/health-check a local server + point its existing
-  provider at it** — not embed a C++/LLamaSharp engine in-process. Default to the light single-binary
-  engines (Ollama or `llama-server`, which can fetch GGUF itself); architecture-neutral, stays pure
-  .NET. What FreeAgent builds: server lifecycle (spawn/health-check/shutdown, port mgmt), a model
-  download/catalog UX, and config mapping. *Pointing at an already-running server is config-only
-  today (see `docs/usage.md`); this item is about owning the download + launch.* exo (distributed,
-  Apple-Silicon/MLX) stays **docs-only** — point at it if you run it.
+- [x] **Local model runner (server lifecycle)** — `ModelServerLauncher` spawns `llama-server`
+  (or any OpenAI-compat binary via `--bin <path>`), records the pid in
+  `$XDG_CACHE_HOME/freeagent/model-server.pid`, drains its stdout/stderr to a rolling log, and
+  polls `/health` for up to 30s. `/serve start <model-path> [--port N] [--bin <path>] [-- <extra>]`,
+  `/serve stop`, `/serve status` from the REPL. Idempotent — a second `/serve start` while a
+  server is already running reports the existing pid instead of stomping it. Pre-flight checks
+  for missing model file, port already in use, and binary not on `$PATH`. On success the REPL
+  prints the `OPENAI_BASE_URL=…/v1 FREEMODEL=…` invocation line to point a fresh `freeagent` at
+  it. **Pending follow-ups**: model download/catalog UX (today the user supplies the GGUF
+  themselves), and a Windows-shaped service-style backend (the current implementation is
+  Linux-shaped).
 - [ ] **Multimodal — far future.** Image gen / speech-to-text / text-to-speech are *not* a near-term
   goal and stay text/coding-focused for now. When wanted, reach them the same way as LLMs: via a
   multimodal local server (e.g. **LocalAI**, which already exposes image/STT/TTS behind one

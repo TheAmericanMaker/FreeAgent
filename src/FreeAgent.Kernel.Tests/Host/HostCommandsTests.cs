@@ -12,7 +12,75 @@ public sealed class HostCommandsTests
     public void HelpListsTheCommands()
     {
         var help = HostCommands.HelpText();
-        help.Should().Contain("/help").And.Contain("/status").And.Contain("/model").And.Contain("/plan");
+        help.Should().Contain("/help").And.Contain("/status").And.Contain("/model").And.Contain("/plan")
+            .And.Contain("/serve");
+    }
+
+    [Fact]
+    public void ServeStartParsesModelPathPortAndBinDefaults()
+    {
+        var (args, err) = HostCommands.ParseServeStart(["/serve", "start", "/m/qwen.gguf"]);
+        err.Should().BeNull();
+        args.Should().NotBeNull();
+        args!.ModelPath.Should().Be("/m/qwen.gguf");
+        args.Port.Should().Be(8080);
+        args.BinPath.Should().Be("llama-server");
+        args.ExtraArgs.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ServeStartParsesPortAndBinFlags()
+    {
+        var (args, err) = HostCommands.ParseServeStart(
+            ["/serve", "start", "/m/qwen.gguf", "--port", "9001", "--bin", "/opt/llama-server"]);
+        err.Should().BeNull();
+        args!.Port.Should().Be(9001);
+        args.BinPath.Should().Be("/opt/llama-server");
+    }
+
+    [Fact]
+    public void ServeStartCollectsExtraArgsAfterDoubleDash()
+    {
+        var (args, _) = HostCommands.ParseServeStart(
+            ["/serve", "start", "/m/qwen.gguf", "--port", "8080", "--", "--ctx-size", "8192", "-ngl", "32"]);
+        args!.ExtraArgs.Should().Be("--ctx-size 8192 -ngl 32");
+    }
+
+    [Fact]
+    public void ServeStartRejectsBadPortUnknownFlagsAndMissingModel()
+    {
+        HostCommands.ParseServeStart(["/serve", "start"]).Error.Should().Contain("Usage");
+        HostCommands.ParseServeStart(["/serve", "start", "/m/x", "--port", "not-a-number"]).Error.Should().Contain("--port");
+        HostCommands.ParseServeStart(["/serve", "start", "/m/x", "--port", "70000"]).Error.Should().Contain("--port");
+        HostCommands.ParseServeStart(["/serve", "start", "/m/x", "--whatever"]).Error.Should().Contain("Unknown flag");
+        HostCommands.ParseServeStart(["/serve", "start", "/m/x", "/m/y"]).Error.Should().Contain("Unexpected argument");
+    }
+
+    [Fact]
+    public async Task ServeStatusOnFreshInstallReportsNotRunning()
+    {
+        if (File.Exists(ModelServerLauncher.PidFile()))
+            File.Delete(ModelServerLauncher.PidFile()); // make sure we're starting clean
+
+        var result = await HostCommands.Serve(["/serve", "status"]);
+        result.Should().Be("Not running.");
+    }
+
+    [Fact]
+    public async Task ServeStopWithNoPidFileReportsNotRunning()
+    {
+        if (File.Exists(ModelServerLauncher.PidFile()))
+            File.Delete(ModelServerLauncher.PidFile());
+
+        var result = await HostCommands.Serve(["/serve", "stop"]);
+        result.Should().Contain("Not running");
+    }
+
+    [Fact]
+    public async Task ServeRejectsUnknownSubcommands()
+    {
+        (await HostCommands.Serve(["/serve"])).Should().Contain("Usage");
+        (await HostCommands.Serve(["/serve", "burn"])).Should().Contain("Unknown /serve");
     }
 
     [Fact]

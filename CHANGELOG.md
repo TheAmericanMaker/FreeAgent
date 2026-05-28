@@ -6,6 +6,22 @@ All notable changes to FreeAgent are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added — local model runner
+
+- **`ModelServerLauncher` + `/serve`** — spawn / stop / inspect a local OpenAI-compat inference
+  server (default: `llama-server`; configurable with `--bin <path>`). `/serve start <model-path>
+  [--port N] [--bin <path>] [-- <extra args>]` spawns the binary, records the pid in
+  `$XDG_CACHE_HOME/freeagent/model-server.pid`, drains stdout/stderr to a rolling log, and polls
+  `/health` for up to 30s. Pre-flight checks: model file exists, port free, binary launchable.
+  `/serve stop` kills the recorded pid (entire process tree) and clears the pid file; `/serve
+  status` reports running / stale / not-running. Idempotent: a second start while running just
+  reports the existing pid instead of stomping it. On success the launcher prints the exact
+  `OPENAI_BASE_URL=…/v1 FREEMODEL=… freeagent` line to point a fresh REPL at the server. Tests
+  cover the argument parser exhaustively (port validation, unknown flags, extra args after `--`,
+  conflicting positionals) plus the "no pid file" status / stop paths; the spawn path itself is
+  intentionally exercised by hand against a real `llama-server` rather than mocked. Model
+  download/catalog UX remains a follow-up — bring your own GGUF for now.
+
 ### Added — C# analysis
 
 - **`CSharpAnalysis` tool** — Roslyn-backed syntactic analysis of `.cs` files in the workspace.

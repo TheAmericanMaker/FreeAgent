@@ -46,6 +46,9 @@ public static class HostCommands
             case "/doctor":
                 Console.WriteLine(DoctorText(state, diagnostics));
                 break;
+            case "/serve":
+                Console.WriteLine(Serve(parts).GetAwaiter().GetResult());
+                break;
             default:
                 Console.WriteLine($"Unknown command: {parts[0]}. Try /help.");
                 break;
@@ -66,6 +69,11 @@ public static class HostCommands
           /run <name> ...  Run a playbook (.md files in .freeagent/playbooks / ~/.config/freeagent/playbooks).
                            Positional args become {{arg1}}, {{arg2}}, … Bare `/run` lists available.
           /doctor          Print a one-shot configuration + health snapshot.
+          /serve start <model-path> [--port N] [--bin <path>] [-- <extra args>]
+                           Spawn a local OpenAI-compat inference server (llama-server by default).
+                           Prints the OPENAI_BASE_URL line to point FreeAgent at it.
+          /serve stop      Kill the running local server (if any).
+          /serve status    Show whether the local server is running.
           exit | quit      End the session (also Ctrl+D / EOF).
           Ctrl+C           Cancel the current turn without quitting.
         """;
@@ -181,6 +189,86 @@ public static class HostCommands
         return state.Tags.Remove(parts[1])
             ? $"Untagged: {parts[1]}"
             : $"No such tag: {parts[1]}";
+    }
+
+    /// <summary>
+    /// Parses the arguments for <c>/serve start</c> into a structured shape. Pure so tests can
+    /// exercise every flag combination without spawning a subprocess.
+    /// </summary>
+    public sealed record ServeStartArgs(string ModelPath, int Port, string BinPath, string ExtraArgs);
+
+    /// <summary>
+    /// Parses <c>/serve start &lt;path&gt; [--port N] [--bin path] [-- extra…]</c>. Returns null with
+    /// an error message on bad input.
+    /// </summary>
+    public static (ServeStartArgs? Args, string? Error) ParseServeStart(string[] parts)
+    {
+        if (parts.Length < 3)
+            return (null, "Usage: /serve start <model-path> [--port N] [--bin <path>] [-- <extra args>]");
+
+        string? model = null;
+        var port = 8080;
+        var bin = "llama-server";
+        var extra = new List<string>();
+        var afterDoubleDash = false;
+
+        for (var i = 2; i < parts.Length; i++)
+        {
+            var tok = parts[i];
+            if (afterDoubleDash) { extra.Add(tok); continue; }
+            switch (tok)
+            {
+                case "--":
+                    afterDoubleDash = true;
+                    break;
+                case "--port" when i + 1 < parts.Length && int.TryParse(parts[i + 1], out var p) && p is > 0 and < 65536:
+                    port = p; i++;
+                    break;
+                case "--port":
+                    return (null, "--port needs a valid TCP port (1–65535).");
+                case "--bin" when i + 1 < parts.Length:
+                    bin = parts[i + 1]; i++;
+                    break;
+                case "--bin":
+                    return (null, "--bin needs a path.");
+                default:
+                    if (tok.StartsWith("--"))
+                        return (null, $"Unknown flag: {tok}");
+                    if (model is not null)
+                        return (null, $"Unexpected argument '{tok}' — model path was already '{model}'. Use '--' before extra server args.");
+                    model = tok;
+                    break;
+            }
+        }
+
+        if (model is null)
+            return (null, "/serve start needs a <model-path>.");
+
+        return (new ServeStartArgs(model, port, bin, string.Join(' ', extra)), null);
+    }
+
+    /// <summary>Dispatch for <c>/serve {start|stop|status}</c>. Awaits the launcher.</summary>
+    public static async Task<string> Serve(string[] parts)
+    {
+        if (parts.Length < 2)
+            return "Usage: /serve {start|stop|status} …  (see /help)";
+
+        switch (parts[1].ToLowerInvariant())
+        {
+            case "start":
+                {
+                    var (args, err) = ParseServeStart(parts);
+                    if (args is null) return err ?? "Bad /serve start arguments.";
+                    return await ModelServerLauncher.StartAsync(
+                        args.ModelPath, args.Port, args.BinPath, args.ExtraArgs, CancellationToken.None);
+                }
+            case "stop":
+                return ModelServerLauncher.Stop();
+            case "status":
+                return ModelServerLauncher.Status();
+            default:
+                return $"Unknown /serve subcommand '{parts[1]}'. Use start, stop, or status.";
+        }
     }
 
     /// <summary>Applies <c>/plan</c> (toggle, or <c>on</c>/<c>off</c>), mutating the session and returning the status line.</summary>
