@@ -51,8 +51,8 @@ The largest is OpenAIProvider.cs at 307 lines …
   re-enabled by an allow rule.
 - **Deterministic and testable.** The kernel has no global state and no hidden I/O.
   Providers, tools, the clock-free permission engine, and the filesystem are all
-  interfaces, so the 422-test suite runs entirely against fakes (plus two `[Skip]`'d
-  MCP / LSP smoke tests that pass in isolation).
+  interfaces, so the 445-test suite runs entirely against fakes — no network, no model,
+  no real filesystem.
 - **Crash-safe.** Sessions persist to JSONL through an atomic write-temp → fsync →
   rename → fsync-dir sequence, so a crash mid-write never corrupts the transcript.
 - **Frontend-agnostic.** Per ADR 0005, the kernel is headless; `FreeAgent.Host`
@@ -92,7 +92,7 @@ The directory you launch from is the agent's sandbox.
 
 ```bash
 dotnet build FreeAgent.slnx     # build everything (warnings are errors)
-dotnet test  FreeAgent.slnx     # 422 pass + 2 skip (MCP + LSP smoke tests)
+dotnet test  FreeAgent.slnx     # 445 pass + 0 skip
 OPENAI_API_KEY=sk-... dotnet run --project src/FreeAgent.Host
 ```
 
@@ -460,7 +460,7 @@ src/FreeAgent.Server/              HTTP + SSE protocol surface (ADR 0005)
   HttpSseEventSink.cs     IEventSink that streams events into an SSE response
 
 src/FreeAgent.Kernel.Tests/        xUnit + FluentAssertions; fakes for every seam
-                                   (422 pass + 2 skip)
+                                   (445 pass)
 
 docs/                              Architecture notes, ADRs, and the reimplementation spec
 ```
@@ -469,7 +469,7 @@ docs/                              Architecture notes, ADRs, and the reimplement
 
 ```bash
 dotnet build FreeAgent.slnx        # warnings are errors
-dotnet test  FreeAgent.slnx        # 422 pass + 2 skip (MCP + LSP smoke tests)
+dotnet test  FreeAgent.slnx        # 445 pass + 0 skip
 dotnet run --project src/FreeAgent.Host -- --verbose      # interactive CLI
 dotnet run --project src/FreeAgent.Server                 # HTTP + SSE protocol on :5000
 ```
@@ -511,15 +511,18 @@ or external platform integrations (VS Code, ACP, web, Slack/GitHub) that are
 clients of the protocol surface rather than additions to the kernel.
 
 **Now shipped (since the original "out of scope" list above was written):**
-sub-agents, playbooks, **MCP client**, **LSP client** (both `[Skip]`'d
-integration smoke tests due to a JsonRpcClient + xUnit runner interaction;
-the protocol code is exercised by the matching tool adapters), native
-**Anthropic / Azure OpenAI / Ollama / AWS Bedrock / Google Vertex**
-providers, **Roslyn syntactic + semantic** analysis (`CSharpAnalysis`
-tool — `find-references` / `find-definition` / `semantic-diagnostics`
-over a real `CSharpCompilation`), **local model server lifecycle**
-(`/serve`), opt-in workspace file watching, session forking (`/fork`),
-Anthropic **extended thinking** (`FREE_THINKING_BUDGET`),
+sub-agents, playbooks, **MCP client**, **LSP client** (both smoke tests now
+run cleanly — `JsonRpcClient` buffers responses for ids whose `CallAsync`
+hasn't finished registering yet), native **Anthropic / Azure OpenAI /
+Ollama / AWS Bedrock / Google Vertex** providers, **Roslyn syntactic +
+semantic** analysis (`CSharpAnalysis` tool — `find-references` /
+`find-definition` / `semantic-diagnostics` over a real
+`CSharpCompilation`, with **`.csproj`-aware references** pulled from each
+project's `obj/project.assets.json` after `dotnet restore`), **local
+model server lifecycle** (`/serve start|stop|status`) plus
+**GGUF download + catalog** (`/serve download hf:owner/repo/path.gguf` /
+`/serve models`), opt-in workspace file watching, session forking
+(`/fork`), Anthropic **extended thinking** (`FREE_THINKING_BUDGET`),
 **`StopReason` + `Model` + `ModelCatalog`** provider-model scaffolding,
 the **`FreeAgent.Server` HTTP + SSE protocol surface** (per ADR 0005,
 with an OpenAPI spec served at `/openapi/v1.json` and an optional
@@ -529,7 +532,7 @@ layer for the future TUI to bind against.
 Still **deliberately deferred:** a full-screen TUI (planned as a Bun/opentui
 client over the headless-core protocol — see ADR 0005), editor &
 remote integrations (VS Code, ACP, web, Slack/GitHub apps), multimodal
-generation, a `.csproj`-aware reference resolver for Roslyn semantic
-actions (workspace + .NET stdlib is supported today; NuGet packages the
-host doesn't ship aren't), and command palette **UI** (the registry
-layer is in; the visual palette ships with the TUI).
+generation, callers/blast-radius semantic actions in Roslyn, a
+Windows-shaped backend for `/serve`'s pid-file model, and the command
+palette **UI** (the registry layer is in; the visual palette ships
+with the TUI).

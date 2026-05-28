@@ -145,8 +145,9 @@ reusable. `McpClient` (`initialize` + `tools/list` + `tools/call`) feeds `McpToo
 `LspToolAdapter`. `McpServerManager` / `LspServerManager` spawn the configured child processes at
 host startup and register the resulting tools. Capability per call is a `ProcessExecCap` scoped to
 `mcp:{server}` / `lsp:{server}` so a whole server can be allow- or deny-ruled as a unit. Both have
-one `[Skip]`'d end-to-end smoke test for an xUnit / background-read-loop interaction; the protocol
-itself is exercised by the adapter unit tests.
+end-to-end smoke tests living in `JsonRpcCollection` (sequential, non-parallel) — `JsonRpcClient`
+buffers responses for ids whose `CallAsync` hasn't finished registering yet, which is what kept
+the in-memory tests passing once the artificial race was understood.
 
 ### Provider matrix
 

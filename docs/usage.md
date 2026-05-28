@@ -191,8 +191,10 @@ full list with fuzzy filter, or `/help` for the inline cheat sheet.
 | `/tag <name>` / `/untag <name>`    | Manage session tags (visible in `/status` and `/doctor`).                                  |
 | `/run <playbook> [args]`           | Render a Markdown playbook with `{{argN}}` substitution and dispatch it as a turn.        |
 | `/doctor`                          | One-shot diagnostic: provider, model, base URL, tool inventory, sub-agent roles.          |
-| `/serve start <model-path> [...]`  | Spawn `llama-server` (or any OpenAI-compat binary) and print the `OPENAI_BASE_URL` line.  |
+| `/serve start <name-or-path> [...]`| Spawn `llama-server` (or any OpenAI-compat binary). A bare name is resolved against the local model catalog. |
 | `/serve stop` / `/serve status`    | Kill the recorded server / report its status.                                             |
+| `/serve download <url-or-hf:owner/repo/path.gguf> [--name <local-name>]` | Stream a GGUF into the local catalog. `HF_TOKEN` is forwarded for gated repos. |
+| `/serve models`                    | List downloaded GGUFs.                                                                    |
 | `/fork`                            | Snapshot the current transcript to `session-fork-<id>.jsonl` for branching.               |
 | `/commands [query]`                | Fuzzy command palette (same registry the future TUI binds against).                       |
 

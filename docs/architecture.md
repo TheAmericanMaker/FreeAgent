@@ -12,7 +12,7 @@ phasing decision that made the kernel headless and added the protocol server, se
 
 Everything the kernel touches at runtime is behind an interface, and the kernel
 holds no global or static mutable state. That is what makes it deterministic and
-fully testable against fakes (422 pass + 2 skip today).
+fully testable against fakes (445 passing tests today).
 
 ```
                         ┌─────────────────────────────────────────────────┐
@@ -296,9 +296,13 @@ they're carrying.
   `ProcessExecCap("lsp:{server}", ...)`. `LspServerManager` mirrors `McpServerManager`'s shape.
   `StdioLspTransport` handles the Content-Length framing.
 
-Both layers have one `[Skip]`'d end-to-end smoke test for a JsonRpcClient + xUnit runner
-interaction (passes in isolation, hangs when combined). The adapter logic and request shapes
-are covered by separate unit tests.
+Both layers have an end-to-end smoke test in the `JsonRpcCollection` (`DisableParallelization =
+true`). The original "hangs the runner" issue was a race against the zero-latency in-memory test
+transport — the read loop could consume a pre-queued response before `CallAsync` registered its
+TCS. `JsonRpcClient` now buffers responses for unknown ids (`_earlyResponses` / `_earlyErrors`)
+and `CallAsync` drains the matching entry under the same gate that registers the TCS, so even
+pre-queued responses resolve correctly. Production paths never hit the buffer (TCS registration
+runs before the transport write).
 
 ## Protocol server (`FreeAgent.Server`)
 
@@ -356,5 +360,7 @@ The suite (xUnit + FluentAssertions) exercises each contract against a fake coun
 `RecordingEventSink` capture interactions; `InMemorySessionStore` and `RecordingAtomicFileSystem`
 stand in for durable I/O; the MCP/LSP tests use in-memory `Channel`-backed transports. The
 protocol server is tested via `Microsoft.AspNetCore.Mvc.Testing`'s `WebApplicationFactory` —
-in-process HTTP, no network bind. Two integration smoke tests are `[Skip]`'d for a JsonRpcClient
-+ xUnit runner interaction (pass in isolation, hang in suite); everything else runs every build.
+in-process HTTP, no network bind. The MCP and LSP end-to-end smoke tests live in
+`JsonRpcCollection` (`DisableParallelization = true`) and run every build — see the MCP/LSP
+section above for why a buffer in `JsonRpcClient` was needed to make the in-memory transport
+sequencing work.
