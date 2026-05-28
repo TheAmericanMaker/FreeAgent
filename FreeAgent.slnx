@@ -3,5 +3,6 @@
     <Project Path="src/FreeAgent.Host/FreeAgent.Host.csproj" />
     <Project Path="src/FreeAgent.Kernel.Tests/FreeAgent.Kernel.Tests.csproj" />
     <Project Path="src/FreeAgent.Kernel/FreeAgent.Kernel.csproj" />
+    <Project Path="src/FreeAgent.Server/FreeAgent.Server.csproj" />
   </Folder>
 </Solution>

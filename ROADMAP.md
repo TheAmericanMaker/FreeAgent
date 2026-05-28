@@ -112,8 +112,18 @@ Phasing (the kernel is *already* effectively headless — `SessionRuntime` + `IE
 
 - [ ] Keep building near-term/coming-next features **in-process** for now; just keep
   `SessionRuntime` / `IEventSink` / input frontend-agnostic so the seam stays clean.
-- [ ] **Protocol server** — add a server project hosting `SessionRuntime`, bridging `IEventSink`
-  and input to HTTP + SSE, emitting an OpenAPI spec (additive — not a kernel rewrite).
+- [x] **Protocol server** — new `FreeAgent.Server` project (ASP.NET Core minimal API). Endpoints:
+  `POST /sessions` (create + return id + working dir), `GET /sessions` (list active ids),
+  `GET /sessions/{id}` (state summary: message count, plan mode, tags, iterations),
+  `POST /sessions/{id}/turns` (submit user input; SSE response streams text/thinking/tool_call/
+  tool_result/usage events, then a final `done` event with the assembled reply), `DELETE
+  /sessions/{id}`. `HttpSseEventSink` bridges `IEventSink` callbacks to one SSE event per
+  callback. Per-session runtime state lives in an in-memory `SessionRegistry`; the kernel-side
+  `JsonlSessionStore` still owns disk durability. Optional API-key gate via
+  `FREEAGENT_SERVER_API_KEY` env var (HTTP `Authorization: Bearer <key>`) — when unset, the server
+  is open and intended for loopback bind only. Tested with `WebApplicationFactory` in-process
+  (no network bind): create / list / get / get-404 / delete / delete-again-404 / post-turn-404 /
+  post-turn-400 + API-key-rejects / API-key-accepts.
 - [ ] First protocol **frontend** — a Bun/opentui TUI client (opencode-style). The existing
   console host remains as the minimal built-in/fallback client.
 

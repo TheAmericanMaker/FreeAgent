@@ -6,6 +6,26 @@ All notable changes to FreeAgent are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added — protocol server (HTTP + SSE)
+
+- **`FreeAgent.Server`** — new ASP.NET Core minimal-API project that hosts the kernel as a
+  network service (ADR 0005). Endpoints: `POST /sessions`, `GET /sessions`, `GET /sessions/{id}`,
+  `POST /sessions/{id}/turns` (SSE-streamed: `event: text|thinking|tool_call|tool_result|usage`
+  per callback, then a final `event: done` with the assembled reply), and `DELETE /sessions/{id}`.
+- **`HttpSseEventSink`** — bridges the kernel's `IEventSink` to a per-turn SSE response. Writes are
+  serialized via a lock so interleaved events can't tear a line; client-disconnect mid-turn
+  is swallowed (the runtime's cancellation token handles the rest).
+- **`SessionRuntime.SwapEventSink`** — the runtime now exposes an atomic sink swap so each HTTP
+  turn can route into its own SSE stream without recreating the runtime.
+- **Auth gate** — optional bearer-token check via `FREEAGENT_SERVER_API_KEY`. When unset, the
+  server is open and intended for loopback bind only.
+- **`SessionRegistry`** + **`ProviderFactory`** — in-memory session map (concurrent) and a
+  reusable wrapper around the host's `ProviderConfig` so the server selects providers from the
+  same env-var/config matrix as the CLI.
+- Added `Microsoft.AspNetCore.Mvc.Testing` to the test project; nine new tests cover the full
+  HTTP surface (create / list / get / get-404 / delete / delete-again-404 / post-turn-404 /
+  post-turn-400) plus the auth gate (rejects without header, accepts correct bearer).
+
 ### Added — LSP client
 
 - **`LspClient` + `StdioLspTransport` + `LspServerManager` + `LspToolAdapter`** — language-server

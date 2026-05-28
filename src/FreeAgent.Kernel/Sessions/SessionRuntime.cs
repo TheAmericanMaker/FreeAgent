@@ -21,9 +21,17 @@ public sealed class SessionRuntime
     private readonly IToolRegistry _tools;
     private readonly TurnExecutor _turnExecutor;
     private readonly IPersistenceStore _store;
-    private readonly IEventSink _events;
+    private IEventSink _events;
     private readonly SessionState _state;
     private readonly DoomLoopDetector _doomLoop = new(3);
+
+    /// <summary>
+    /// Replace the sink the runtime emits events to. The protocol server uses this to route each
+    /// turn into a per-request SSE stream — without it, the server would have to recreate the
+    /// runtime for every request. Atomic via <see cref="Volatile.Write"/>; outstanding callbacks in
+    /// flight on the old sink complete with the old sink.
+    /// </summary>
+    public void SwapEventSink(IEventSink events) => Volatile.Write(ref _events!, events ?? throw new ArgumentNullException(nameof(events)));
 
     public SessionRuntime(
         IProvider provider,
