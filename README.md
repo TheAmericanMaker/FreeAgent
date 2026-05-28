@@ -126,7 +126,8 @@ The host is configured through environment variables and a few flags:
 | `--verbose`, `-v` | Print streamed reasoning (dimmed) and a `[Tokens: in → out]` line. |
 | `--resume [id]`   | Resume the session in `session.jsonl` (optionally requiring its id). |
 
-At the prompt, `/plan [on\|off]` toggles plan mode (read-only tools only).
+At the prompt, slash commands handle host-side concerns (not sent to the model):
+`/help`, `/status`, `/model`, `/plan [on|off]` (plan mode), `/undo` (revert the most recent file change).
 
 ### Provider settings without env vars
 
@@ -262,7 +263,8 @@ a reason. Evaluation order (first match wins):
 5. **Tool-level allow** → covers all of the tool's capabilities.
 6. **Per-capability coverage** — an allowed capability type, a matching allow rule,
    or an auto-allow rule.
-7. **Any uncovered capability** → deny (this is where a UX layer would prompt).
+7. **Any uncovered capability** → ask the interactive approver if one is configured (the host
+   prompts `[once / session / always→config / deny]`); otherwise deny.
 
 **Capabilities** are fine-grained authorization units a tool declares per call:
 `FileReadCap`, `FileWriteCap`, `ProcessExecCap`, `NetworkEgressCap`,
@@ -295,11 +297,14 @@ parallel/serial scheduling above) and which capability it needs.
 | --------------- | -------------------------------------- | :-------: | ----------------- | --------------------------------------------------------------------- |
 | `ReadFile`      | `path`                                 |    yes    | `FileReadCap`     | UTF-8 read; auto-allowed inside the workspace.                        |
 | `WriteFile`     | `path`, `content`                      |    no     | `FileWriteCap`    | Creates parent dirs; never auto-allowed; protected prefixes blocked.  |
+| `EditFile`      | `path`, `old_string`, `new_string`, `replace_all?` | no | `FileWriteCap` | In-place edit by literal substring; unique-match required (opt-in `replace_all`); preserves untouched content. Snapshots for `/undo`. |
 | `ProcessExec`   | `command`, `args?`                     |    no     | `ProcessExecCap`  | Runs in the workspace; 30s timeout kills the process tree; returns exit code + stdout/stderr. |
 | `Glob`          | `pattern`, `path?`                     |    yes    | `FileReadCap`     | Find files by glob (`**/*.cs`); managed (no `rg`); skips noise dirs; capped. |
 | `Grep`          | `pattern`, `path?`, `glob?`, `ignore_case?` | yes  | `FileReadCap`     | Regex content search → `path:line:text`; skips binary files; capped.  |
 | `EnterPlanMode` | —                                      |    yes    | none              | Turns plan mode on (only read-only tools run until exit).             |
 | `ExitPlanMode`  | —                                      |    yes    | none              | Turns plan mode off; read-only so it is callable while plan mode is active. |
+| `ReadMemory`    | `key`                                  |    yes    | `MemoryCap` read  | Read a cross-session memory entry (`~/.config/freeagent/memory`). Auto-allowed. |
+| `WriteMemory`   | `key`, `content`                       |    no     | `MemoryCap` write | Save/overwrite a memory entry. Not auto-allowed (interactive approval). |
 
 `Glob`/`Grep` are read-only **and** concurrency-safe, so they run in the parallel window. Paths are
 resolved against the working directory by the same rule the permission engine uses, so the capability
