@@ -75,6 +75,10 @@ All notable changes to FreeAgent are recorded here. The format follows
   short-circuits before `execute`; a successful mutating tool drops every cached entry (conservative
   invalidation). `IToolResultCache` / `InMemoryToolResultCache` are public seams; the host wires the
   in-memory cache by default.
+- **LLM-summary compaction** — `Compactor.CompactWithSummaryAsync` asks the active provider to
+  summarise the dropped portion in one short paragraph; the summary replaces the previous notice in
+  the first kept user message. `SessionRuntime` uses it by default; on any provider error or blank
+  summary it falls back to the non-LLM notice (compaction never blocks the turn).
 - **Context-window compaction** — `SessionState` tracks `LastInputTokens` (from `Usage`) and a
   configurable `ContextWindow` (env `FREE_CONTEXT_TOKENS`); when the previous turn pushed input
   tokens past 80% of the window, `SessionRuntime` calls `Compactor.Compact` before the next turn —

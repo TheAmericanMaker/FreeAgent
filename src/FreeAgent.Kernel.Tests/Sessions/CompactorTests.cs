@@ -86,6 +86,58 @@ public sealed class CompactorTests
     }
 
     [Fact]
+    public async Task CompactWithSummaryEmbedsProviderSummaryInFirstKeptUserMessage()
+    {
+        var messages = new List<Message>
+        {
+            Sys("you are"),
+            U("t1"), A("r1"),
+            U("t2"), A("r2"),
+            U("t3"), A("r3"),
+            U("t4"), A("r4"),
+            U("t5"), A("r5"),
+        };
+        var provider = new FakeProvider([StreamScript.Text("Summary: did three things.")]);
+
+        var result = await Compactor.CompactWithSummaryAsync(messages, provider, keepLastTurns: 2);
+
+        result[0].Role.Should().Be(MessageRole.System);
+        result[1].Role.Should().Be(MessageRole.User);
+        result[1].Content.Should().Contain("[Summary of");
+        result[1].Content.Should().Contain("Summary: did three things.");
+        result[1].Content.Should().Contain("t4"); // original kept content preserved
+        result.Count(m => m.Role == MessageRole.User).Should().Be(2);
+    }
+
+    [Fact]
+    public async Task CompactWithSummaryFallsBackToNoticeWhenProviderReturnsBlank()
+    {
+        var messages = new List<Message>
+        {
+            U("t1"), A("r1"),
+            U("t2"), A("r2"),
+            U("t3"), A("r3"),
+        };
+        var provider = new FakeProvider([StreamScript.Text("   ")]); // empty after trim
+
+        var result = await Compactor.CompactWithSummaryAsync(messages, provider, keepLastTurns: 1);
+
+        result[0].Content.Should().StartWith("[Compacted:"); // non-LLM fallback
+        result[0].Content.Should().NotContain("[Summary of");
+    }
+
+    [Fact]
+    public async Task CompactWithSummaryDoesNothingWhenAtOrBelowKeepLimit()
+    {
+        var messages = new List<Message> { Sys("s"), U("t1"), A("r1") };
+        var provider = new FakeProvider([StreamScript.Text("x")]);
+
+        var result = await Compactor.CompactWithSummaryAsync(messages, provider, keepLastTurns: 4);
+
+        result.Should().Equal(messages);
+    }
+
+    [Fact]
     public void CompactWithNoSystemBlockStillStartsKeptBlockOnUser()
     {
         var messages = new List<Message>

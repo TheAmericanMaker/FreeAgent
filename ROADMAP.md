@@ -51,12 +51,12 @@ see below.)
   without forking the adapter; typed **request options** + a provider-agnostic **`StopReason`**;
   and a formal provider **registry keyed by wire-API** (`openai-completions`, `anthropic-messages`,
   …) rather than by vendor, with a separate model registry.
-- [x] **Context-window management** — done: per-turn input-token tracking in `SessionState`,
-  configurable `ContextWindow` (env `FREE_CONTEXT_TOKENS`), and pre-turn **turn-aware** compaction
-  that drops older `User → Assistant → Tool` blocks (preserving `tool_use` / `tool_result`
-  pairings and the user-first alternation), prepending a notice to the first kept user message.
-  Remaining/next: **LLM-based summarization** of the dropped turns (replace the notice with a
-  real summary).
+- [x] **Context-window management** — per-turn input-token tracking in `SessionState`, configurable
+  `ContextWindow` (env `FREE_CONTEXT_TOKENS`), and pre-turn **turn-aware compaction** that drops
+  older `User → Assistant → Tool` blocks (preserving `tool_use` / `tool_result` pairings and the
+  user-first alternation). The dropped portion is **summarised by the model itself** via
+  `Compactor.CompactWithSummaryAsync` and the summary is prepended to the first kept user message;
+  on any provider error or blank summary, falls back to a non-LLM notice.
 - [x] **Result cache + artifact store** — all four `cache-lookup` / `cache-write` / `invalidate` /
   `artifact-store` seams are now filled. **Cache:** `IToolResultCache` + `InMemoryToolResultCache`
   serve read-only `Success` from cache, skip `execute` on hits, never cache errors/`Empty`, and a
@@ -185,7 +185,7 @@ from the current per-turn `MaxIterations`) would be a separate counter if ever a
 - [x] User-editable system prompt injected on new sessions (`~/.config/freeagent/system.md` + project override)
 - [x] `/help`, `/status`, `/model` slash commands (in addition to `/plan`)
 - [x] Native Anthropic Messages-API streaming provider (text / thinking / tool-use, cache-aware normalized `Usage`) + `FREEPROVIDER` selection with per-provider config sections
-- [x] Context-window safety net — token tracking + pre-turn turn-aware compaction (no LLM summary yet)
+- [x] Context-window management — token tracking + pre-turn turn-aware compaction with LLM-generated summary (fallback notice on failure)
 - [x] `EditFile` tool — safe in-place string-replace editing (unique-match by default)
 - [x] Result cache + artifact store — all four cache/artifact pipeline seams filled; `ReadArtifact` tool retrieves offloaded content
 - [x] File history + `/undo` — per-write snapshots in `SessionState.History`, restored or deleted by `HostCommands.Undo`
