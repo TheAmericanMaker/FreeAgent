@@ -94,6 +94,30 @@ public sealed class HostCommandsTests
     }
 
     [Fact]
+    public void TagAddsAndUntagRemovesAndStatusShowsThem()
+    {
+        var state = State();
+
+        HostCommands.Tag(state, ["/tag", "wip"]).Should().Contain("Tagged");
+        HostCommands.Tag(state, ["/tag", "wip"]).Should().Contain("Already tagged");
+        state.Tags.Should().Contain("wip");
+
+        HostCommands.StatusText(state, "m").Should().Contain("wip");
+
+        HostCommands.Untag(state, ["/untag", "wip"]).Should().Contain("Untagged");
+        state.Tags.Should().BeEmpty();
+        HostCommands.Untag(state, ["/untag", "wip"]).Should().Contain("No such tag");
+    }
+
+    [Fact]
+    public void TagAndUntagWithoutNameShowUsage()
+    {
+        var state = State();
+        HostCommands.Tag(state, ["/tag"]).Should().Contain("Usage");
+        HostCommands.Untag(state, ["/untag"]).Should().Contain("Usage");
+    }
+
+    [Fact]
     public void PlanToggleFlipsAndExplicitOnOffSets()
     {
         var state = State();

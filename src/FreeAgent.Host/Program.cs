@@ -111,6 +111,8 @@ public static class Program
             : NewSession(workingDir);
         if (int.TryParse(Environment.GetEnvironmentVariable("FREE_CONTEXT_TOKENS"), out var ctx) && ctx > 0)
             state.ContextWindow = ctx;
+        if (int.TryParse(Environment.GetEnvironmentVariable("FREE_SESSION_ITERATIONS"), out var sit) && sit > 0)
+            state.SessionIterationLimit = sit;
 
         // SessionStart hooks run once per session (after state creation, before the first turn).
         await hookRunner.RunSessionStartAsync(state, default);

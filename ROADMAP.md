@@ -153,8 +153,12 @@ Phasing (the kernel is *already* effectively headless — `SessionRuntime` + `IE
 - [ ] **Editor & remote** — VS Code extension, ACP (Zed), desktop wrapper, web frontend,
   Slack / GitHub apps. Per ADR 0005 these are all just additional **clients of the one protocol**,
   not separate integrations.
-- [ ] **Misc** — extended thinking + token budgets, session tagging/forking, file
-  watching during a session, opt-in OpenTelemetry tracing.
+- [ ] **Misc** — **session tagging** (`/tag` / `/untag` + visible in `/status`), **whole-session
+  iteration limit** (env `FREE_SESSION_ITERATIONS`, in addition to the per-turn `MaxIterations=90`),
+  and **opt-in OpenTelemetry tracing** (the kernel exposes `SessionRuntime.ActivitySource` and
+  `ToolPipeline.ActivitySource`; attach any `ActivityListener` / OTel SDK to consume) done.
+  Remaining: **session forking** (clone state to a new id), **file watching** during a session,
+  **extended-thinking + token-budget controls**.
 
 ## Deliberately deferred
 

@@ -37,6 +37,12 @@ public static class HostCommands
             case "/revert":
                 Console.WriteLine(Revert(state, parts));
                 break;
+            case "/tag":
+                Console.WriteLine(Tag(state, parts));
+                break;
+            case "/untag":
+                Console.WriteLine(Untag(state, parts));
+                break;
             case "/doctor":
                 Console.WriteLine(DoctorText(state, diagnostics));
                 break;
@@ -55,6 +61,8 @@ public static class HostCommands
           /plan [on|off]   Toggle plan mode (only read-only tools run).
           /undo            Revert the most recent file change this session.
           /revert [N]      Drop the last N user turns from the transcript (default 1). Files are not reverted (use /undo).
+          /tag <name>      Add a session tag (visible in /status and /doctor).
+          /untag <name>    Remove a session tag.
           /doctor          Print a one-shot configuration + health snapshot.
           exit | quit      End the session (also Ctrl+D / EOF).
           Ctrl+C           Cancel the current turn without quitting.
@@ -66,7 +74,9 @@ public static class HostCommands
         Model:      {model}
         Directory:  {state.WorkingDirectory}
         Messages:   {state.Messages.Count}
+        Iterations: {state.TotalIterations}{(state.SessionIterationLimit is { } cap ? $" / {cap}" : "")}
         Plan mode:  {(state.PlanMode ? "ON (read-only tools only)" : "off")}
+        Tags:       {(state.Tags.Count == 0 ? "none" : string.Join(", ", state.Tags))}
         Approvals:  {(state.SessionApprovals.Count == 0 ? "none granted this session" : string.Join(", ", state.SessionApprovals))}
         """;
 
@@ -149,6 +159,26 @@ public static class HostCommands
             state.Messages.RemoveAt(state.Messages.Count - 1);
 
         return $"Reverted {n} turn(s); dropped {dropped} message(s). Files are unchanged — use /undo to roll back writes.";
+    }
+
+    /// <summary>Adds <paramref name="parts"/>[1] to <paramref name="state"/>'s tags.</summary>
+    public static string Tag(SessionState state, string[] parts)
+    {
+        if (parts.Length < 2 || string.IsNullOrWhiteSpace(parts[1]))
+            return "Usage: /tag <name>";
+        return state.Tags.Add(parts[1])
+            ? $"Tagged: {parts[1]}"
+            : $"Already tagged: {parts[1]}";
+    }
+
+    /// <summary>Removes <paramref name="parts"/>[1] from <paramref name="state"/>'s tags.</summary>
+    public static string Untag(SessionState state, string[] parts)
+    {
+        if (parts.Length < 2 || string.IsNullOrWhiteSpace(parts[1]))
+            return "Usage: /untag <name>";
+        return state.Tags.Remove(parts[1])
+            ? $"Untagged: {parts[1]}"
+            : $"No such tag: {parts[1]}";
     }
 
     /// <summary>Applies <c>/plan</c> (toggle, or <c>on</c>/<c>off</c>), mutating the session and returning the status line.</summary>

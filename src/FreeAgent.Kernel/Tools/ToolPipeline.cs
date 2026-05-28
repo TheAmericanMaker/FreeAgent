@@ -12,6 +12,9 @@ namespace FreeAgent.Kernel;
 /// </summary>
 public sealed class ToolPipeline
 {
+    /// <summary>OpenTelemetry/diagnostics source — each tool call is one Activity span.</summary>
+    public static readonly System.Diagnostics.ActivitySource ActivitySource = new("FreeAgent.Kernel.Pipeline", "0.1.0");
+
     /// <summary>Default character threshold above which a Success result is offloaded to the artifact store.</summary>
     public const int DefaultArtifactThreshold = 10_000;
 
@@ -61,6 +64,10 @@ public sealed class ToolPipeline
 
     public async ValueTask<ToolResult> ExecuteAsync(ToolCall call, SessionState state, CancellationToken cancellationToken)
     {
+        using var activity = ActivitySource.StartActivity($"Tool.{call.Name}");
+        activity?.SetTag("tool.name", call.Name);
+        activity?.SetTag("tool.call_id", call.Id);
+
         // Step 1 — parse. Invalid JSON must not escape as an exception.
         AddStep("parse");
         JsonDocument arguments;

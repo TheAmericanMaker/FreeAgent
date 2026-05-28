@@ -1,9 +1,13 @@
+using System.Diagnostics;
 using System.Text;
 
 namespace FreeAgent.Kernel;
 
 public sealed class SessionRuntime
 {
+    /// <summary>OpenTelemetry/diagnostics source — wrap turn + tool activity in spans without forcing a tracing library.</summary>
+    public static readonly ActivitySource ActivitySource = new("FreeAgent.Kernel.Session", "0.1.0");
+
     // Hard ceiling on agentic iterations within a single turn. Matches the Hermes Agent default of
     // 90; a genuinely stuck turn that escapes the doom-loop guard still terminates here.
     private const int MaxIterations = 90;
@@ -39,6 +43,10 @@ public sealed class SessionRuntime
 
     public async ValueTask<TurnResult> RunTurnAsync(string userText, CancellationToken cancellationToken)
     {
+        using var turnActivity = ActivitySource.StartActivity("Session.RunTurn");
+        turnActivity?.SetTag("session.id", _state.SessionId);
+        turnActivity?.SetTag("user.text.length", userText.Length);
+
         _doomLoop.Reset();
 
         // If the previous turn pushed us past the compaction threshold, drop older turns before
@@ -59,6 +67,16 @@ public sealed class SessionRuntime
 
         for (var iteration = 0; iteration < MaxIterations; iteration++)
         {
+            // Whole-session iteration cap (in addition to the per-turn MaxIterations). Off by default
+            // (null = no whole-session limit); a host can set state.SessionIterationLimit.
+            _state.TotalIterations++;
+            if (_state.SessionIterationLimit is { } sessionCap && _state.TotalIterations > sessionCap)
+            {
+                _state.Messages.Add(new Message(MessageRole.Assistant,
+                    $"Session iteration limit ({sessionCap}) reached. Halting the turn."));
+                break;
+            }
+
             var text = new StringBuilder();
             var partialCalls = new Dictionary<string, PartialToolCall>();
             var request = new ProviderRequest(_state.Messages.ToArray(), _tools.Definitions);

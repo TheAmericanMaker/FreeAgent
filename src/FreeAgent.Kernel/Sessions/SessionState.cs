@@ -45,4 +45,13 @@ public sealed class SessionState
     /// <see cref="EditFileTool"/>, drained by the host's <c>/undo</c> command. In-memory only.
     /// </summary>
     public FileHistory History { get; } = new();
+
+    /// <summary>Total agentic iterations consumed across every turn in this session. In-memory only.</summary>
+    public int TotalIterations { get; set; }
+
+    /// <summary>Optional hard cap on <see cref="TotalIterations"/>. Null means no whole-session limit.</summary>
+    public int? SessionIterationLimit { get; set; }
+
+    /// <summary>User-supplied tags for this session (set via the host's <c>/tag</c> command). In-memory only.</summary>
+    public HashSet<string> Tags { get; } = new(StringComparer.Ordinal);
 }
