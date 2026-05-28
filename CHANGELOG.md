@@ -62,6 +62,9 @@ All notable changes to FreeAgent are recorded here. The format follows
 - **`MultiEditFile` tool** — atomic batch of literal-string edits on one file. Each edit obeys the
   same unique-match safety as `EditFile`; any failure aborts the batch *without writing*. Sequential
   edits see each other's intermediate state (so chains compose). One snapshot is taken for `/undo`.
+- **`ApplyPatch` tool** — apply a unified diff to a single file. Each hunk's removed + context lines
+  must match the file uniquely; if any hunk doesn't match, the patch aborts atomically with no
+  changes written. `ApplyPatchTool.ParseHunks` is public and unit-tested.
 
 ### Added — robustness
 

@@ -75,10 +75,10 @@ see below.)
   and silent events; `SpawnAgentTool` exposes it to the model with `AgentSpawnCap` (not auto-allowed
   — each spawn requires approval or an allow rule). Four default roles registered in the host:
   **Explore**, **Plan**, **Coder**, **Verify**.
-- [x] **Richer editing tools** — `EditFile` (literal string-replace with unique-match safety;
-  `replace_all` opt-in) and `MultiEditFile` (atomic batch of edits per file, with the same
-  unique-match safety, single snapshot for `/undo`) done. Remaining: **ApplyPatch** (unified diff
-  application) and a **colored diff view** for writes.
+- [x] **Richer editing tools** — `EditFile` (literal string-replace, unique-match safety,
+  `replace_all` opt-in), `MultiEditFile` (atomic batch of edits per file), and `ApplyPatch`
+  (unified-diff application — atomic per-file, unique-match for each hunk) all done. Remaining: a
+  **colored diff view** for writes (host renderer; sits with the TUI work).
 - [x] **System-prompt assembly** — done: base instructions (overridable file) + working directory +
   git branch (read directly from `.git/HEAD`, no subprocess) + a project context file
   (`CLAUDE.md` / `AGENTS.md` / `FREEAGENT.md`, first found, content appended). Cross-session
