@@ -45,9 +45,12 @@ see below.)
 
 ## Coming next — larger features
 
-- [ ] **More providers** — Anthropic, Azure OpenAI, Ollama done. Groq works via OpenAI-compat
-  (`OPENAI_BASE_URL=https://api.groq.com/openai/v1`, recipe in `docs/usage.md`). Remaining:
-  **Bedrock** (needs AWS SigV4) and **Vertex** (needs Google service-account auth).
+- [x] **More providers** — Anthropic, Azure OpenAI, Ollama, AWS Bedrock done. Groq works via
+  OpenAI-compat (`OPENAI_BASE_URL=https://api.groq.com/openai/v1`, recipe in `docs/usage.md`).
+  Bedrock uses the official `AWSSDK.BedrockRuntime` SDK so SigV4 / region routing / event-stream
+  parsing are SDK responsibilities; auth flows through the default AWS credential chain.
+  **Vertex** remains a follow-up (needs Google service-account auth — recommended via Anthropic on
+  Vertex once the auth wrapper lands).
 - [x] **Provider-model scaffolding** — first-class `Model` metadata record (id, wire API, context
   window, default max-output, supports tools/vision/thinking flags); `StopReason` enum
   (`EndTurn`/`ToolUse`/`MaxTokens`/`StopSequence`/`Refusal`/`Unknown`) carried on every

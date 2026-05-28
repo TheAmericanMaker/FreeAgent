@@ -8,4 +8,7 @@
     <ProjectReference Include="..\FreeAgent.Kernel\FreeAgent.Kernel.csproj" />
     <ProjectReference Include="..\FreeAgent.Host\FreeAgent.Host.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.8" />
+  </ItemGroup>
 </Project>

@@ -3,8 +3,13 @@ using FreeAgent.Server;
 var builder = WebApplication.CreateSlimBuilder(args);
 builder.Services.AddSingleton<SessionRegistry>();
 builder.Services.AddSingleton<ProviderFactory>();
+builder.Services.AddOpenApi();
 
 var app = builder.Build();
+
+// OpenAPI spec at /openapi/v1.json — per ADR 0005, the protocol surface is contract-first; clients
+// (TUI, editor, web) can regenerate from this document instead of mirroring hand-rolled types.
+app.MapOpenApi();
 
 // Optional API key gate (`FREEAGENT_SERVER_API_KEY`). When set, every request must include
 // `Authorization: Bearer <key>` or be rejected. When empty (the default), the server is open —

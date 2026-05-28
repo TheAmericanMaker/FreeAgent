@@ -29,8 +29,9 @@ public static class Program
         var model = settings.Model!;
 
         // ── bootstrap ──────────────────────────────────────────────
-        // Ollama is unauthenticated by default; everyone else requires an API key.
-        if (string.IsNullOrWhiteSpace(apiKey) && providerName != "ollama")
+        // Ollama and Bedrock are unauthenticated-here by default (Bedrock uses the AWS credential
+        // chain, not an inline API key); everyone else requires an API key in the bootstrap.
+        if (string.IsNullOrWhiteSpace(apiKey) && providerName != "ollama" && providerName != "bedrock")
         {
             var keyEnv = providerName switch
             {
@@ -66,6 +67,10 @@ public static class Program
                 endpoint: baseUrl, apiKey: apiKey, deployment: model,
                 apiVersion: settings.ApiVersion ?? AzureOpenAIProvider.DefaultApiVersion),
             "ollama" => new OllamaProvider(baseUrl, model, ollamaNumCtx, ollamaTemperature),
+            // For Bedrock, settings.BaseUrl carries the AWS region (not an HTTP URL); the SDK
+            // turns it into an endpoint via RegionEndpoint.GetBySystemName. Auth flows through
+            // the default AWS credential chain.
+            "bedrock" => new BedrockProvider(region: baseUrl, modelId: model, maxTokens: anthropicMaxTokens),
             _ => new OpenAIProvider(baseUrl, apiKey, model),
         };
         var registry = new ToolRegistry();

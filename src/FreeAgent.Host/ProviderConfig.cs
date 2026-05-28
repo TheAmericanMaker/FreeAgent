@@ -1,4 +1,5 @@
 using System.Text.Json;
+using FreeAgent.Kernel;
 
 namespace FreeAgent.Host;
 
@@ -31,6 +32,8 @@ public sealed class ProviderConfig
     public const string AnthropicDefaultModel = "claude-3-7-sonnet-latest";
     public const string OllamaDefaultBaseUrl = "http://localhost:11434";
     public const string OllamaDefaultModel = "qwen2.5-coder";
+    public const string BedrockDefaultRegion = "us-east-1";
+    public const string BedrockDefaultModel = BedrockProvider.DefaultModelId;
 
     /// <summary>Provider key — <c>openai</c> (default) or <c>anthropic</c>. Env <c>FREEPROVIDER</c> overrides.</summary>
     public string? Provider { get; init; }
@@ -51,6 +54,9 @@ public sealed class ProviderConfig
 
     /// <summary>Optional explicit Ollama section. <c>ApiKey</c> is ignored (Ollama is unauthenticated by default).</summary>
     public ProviderSettings? Ollama { get; init; }
+
+    /// <summary>Optional explicit AWS Bedrock section. <c>BaseUrl</c> is the AWS region (e.g. "us-east-1"); <c>ApiKey</c> is ignored (auth comes from the default AWS credential chain).</summary>
+    public ProviderSettings? Bedrock { get; init; }
 
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web)
     {
@@ -76,6 +82,19 @@ public sealed class ProviderConfig
                 Model:   Resolve(
                     Environment.GetEnvironmentVariable("FREEMODEL") ?? Environment.GetEnvironmentVariable("ANTHROPIC_MODEL"),
                     Anthropic?.Model, AnthropicDefaultModel));
+        }
+
+        if (string.Equals(provider, "bedrock", StringComparison.OrdinalIgnoreCase))
+        {
+            return new ProviderSettings(
+                // For Bedrock the "BaseUrl" slot carries the AWS region — the SDK builds the actual
+                // endpoint from RegionEndpoint.GetBySystemName(...).
+                BaseUrl: Resolve(Environment.GetEnvironmentVariable("AWS_REGION"), Bedrock?.BaseUrl, BedrockDefaultRegion),
+                // No api key: auth lives in the AWS credential chain (env / shared profile / IMDS / SSO).
+                ApiKey:  string.Empty,
+                Model:   Resolve(
+                    Environment.GetEnvironmentVariable("FREEMODEL") ?? Environment.GetEnvironmentVariable("BEDROCK_MODEL"),
+                    Bedrock?.Model, BedrockDefaultModel));
         }
 
         if (string.Equals(provider, "ollama", StringComparison.OrdinalIgnoreCase))

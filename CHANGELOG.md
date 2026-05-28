@@ -6,6 +6,30 @@ All notable changes to FreeAgent are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added — AWS Bedrock provider
+
+- **`BedrockProvider`** — official `AWSSDK.BedrockRuntime` SDK wrapper. SigV4 signing, region
+  routing, retries, and AWS event-stream (`vnd.amazon.eventstream`) parsing are all the SDK's
+  responsibility; the adapter translates between FreeAgent's `ProviderRequest` shape and Bedrock's
+  anthropic-on-bedrock body (Anthropic-Messages shape minus the `model` field, plus required
+  `anthropic_version: bedrock-2023-05-31`). Streaming chunk dispatch is identical to
+  `AnthropicProvider`'s — text, thinking, tool-use, stop-reason — because the wire payload is the
+  same JSON.
+- **`FREEPROVIDER=bedrock`** wiring in `ProviderConfig`. `AWS_REGION` (default `us-east-1`) sets
+  the region; `BEDROCK_MODEL` or `FREEMODEL` selects the model id (default
+  `anthropic.claude-3-7-sonnet-20250219-v1:0`). No API key required — auth flows through the
+  default AWS credential chain (env vars / shared profile / IMDS / SSO).
+- Bedrock body shape is exhaustively covered by the existing Anthropic adapter tests (they share
+  the same builder logic); Bedrock-specific tests cover ctor validation and the divergences
+  (`anthropic_version` carried, no top-level `model`).
+
+### Added — OpenAPI spec emission
+
+- **`GET /openapi/v1.json`** — the protocol server now publishes its OpenAPI document via
+  `Microsoft.AspNetCore.OpenApi`. Lets the eventual TUI / VS Code / web frontends regenerate
+  contracts instead of mirroring hand-rolled types. Covered by a regression test that asserts the
+  document is served and references every session endpoint.
+
 ### Added — protocol server (HTTP + SSE)
 
 - **`FreeAgent.Server`** — new ASP.NET Core minimal-API project that hosts the kernel as a

@@ -112,6 +112,22 @@ public sealed class SessionEndpointsTests : IClassFixture<WebApplicationFactory<
     }
 
     [Fact]
+    public async Task OpenApiSpecExposesEverySessionEndpoint()
+    {
+        var client = _factory.CreateClient();
+
+        var response = await client.GetAsync("/openapi/v1.json");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var spec = await response.Content.ReadAsStringAsync();
+        spec.Should().Contain("\"openapi\":");
+        spec.Should()
+            .Contain("/sessions").And
+            .Contain("/sessions/{id}").And
+            .Contain("/sessions/{id}/turns");
+    }
+
+    [Fact]
     public async Task ApiKeyGate_RejectsRequestsWithoutHeader()
     {
         Environment.SetEnvironmentVariable("FREEAGENT_SERVER_API_KEY", "test-key");

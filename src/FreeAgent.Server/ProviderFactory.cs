@@ -27,6 +27,7 @@ public sealed class ProviderFactory
             "anthropic" => new AnthropicProvider(baseUrl, apiKey, model),
             "azure" => new AzureOpenAIProvider(baseUrl, apiKey, model, settings.ApiVersion ?? AzureOpenAIProvider.DefaultApiVersion),
             "ollama" => new OllamaProvider(baseUrl, model),
+            "bedrock" => new BedrockProvider(region: baseUrl, modelId: model),
             _ => new OpenAIProvider(baseUrl, apiKey, model),
         };
         return (provider, model, name);
