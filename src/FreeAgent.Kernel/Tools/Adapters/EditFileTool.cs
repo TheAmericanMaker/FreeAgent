@@ -83,6 +83,8 @@ public sealed class EditFileTool : ITool
         try
         {
             await File.WriteAllTextAsync(path, updated, cancellationToken);
+            // Snapshot the pre-edit content for /undo (we already have it in `original`).
+            context.Session.History.Record(path, original);
         }
         catch (OperationCanceledException)
         {

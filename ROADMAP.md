@@ -75,8 +75,9 @@ see below.)
   + git branch/status + cross-session memory.
 - [ ] **Cross-session memory** — `MemoryCap` is modeled; add a memory store and a
   read/write tool.
-- [ ] **File history & undo** — per-write snapshots, a `/undo`, and session revert to a
-  prior turn.
+- [x] **File history & undo** — per-write snapshots and `/undo` done (`SessionState.History`,
+  recorded by `WriteFileTool` / `EditFileTool`, popped by the host's `/undo`). Remaining:
+  **session revert to a prior turn** (revert both file state and the message transcript).
 
 ## Architecture direction — decided (see [ADR 0005](docs/decisions/0005-headless-core-protocol.md))
 
@@ -173,3 +174,4 @@ from the current per-turn `MaxIterations`) would be a separate counter if ever a
 - [x] Context-window safety net — token tracking + pre-turn turn-aware compaction (no LLM summary yet)
 - [x] `EditFile` tool — safe in-place string-replace editing (unique-match by default)
 - [x] Result cache — read-only `Success` cached, mutating tools invalidate (`cache-lookup` / `cache-write` / `invalidate` seams filled)
+- [x] File history + `/undo` — per-write snapshots in `SessionState.History`, restored or deleted by `HostCommands.Undo`

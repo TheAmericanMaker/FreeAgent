@@ -6,6 +6,13 @@ All notable changes to FreeAgent are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added — editing & undo
+
+- **File history + `/undo`** — `WriteFileTool` and `EditFileTool` snapshot the pre-write content
+  to `SessionState.History` after a successful write. The new `/undo` host command pops the most
+  recent snapshot and restores it (or deletes the file if it didn't exist before). LIFO ordering
+  across multiple writes.
+
 ### Added — editing
 
 - **`EditFile` tool** — in-place file edit by literal string-replace, with a unique-match safety

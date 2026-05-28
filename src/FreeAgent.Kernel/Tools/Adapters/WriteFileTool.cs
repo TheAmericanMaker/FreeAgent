@@ -30,6 +30,17 @@ public sealed class WriteFileTool : ITool
         var path = ResolvePath(arguments, context);
         var content = arguments.RootElement.GetProperty("content").GetString() ?? string.Empty;
 
+        // Snapshot the pre-write content (null if the file did not exist) for /undo support.
+        string? previous = null;
+        if (File.Exists(path))
+        {
+            try { previous = await File.ReadAllTextAsync(path, cancellationToken); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Couldn't read; proceed without a snapshot. /undo will simply not see this write.
+            }
+        }
+
         try
         {
             var directory = Path.GetDirectoryName(path);
@@ -39,6 +50,7 @@ public sealed class WriteFileTool : ITool
             }
 
             await File.WriteAllTextAsync(path, content, cancellationToken);
+            context.Session.History.Record(path, previous);
 
             // WriteAllTextAsync emits UTF-8 with no BOM, so this is the exact on-disk byte count.
             var bytes = Encoding.UTF8.GetByteCount(content);

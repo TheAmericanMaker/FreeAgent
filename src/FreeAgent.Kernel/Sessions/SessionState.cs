@@ -39,4 +39,10 @@ public sealed class SessionState
     /// decide compaction. Default 128k; the host may override per provider/model. In-memory only.
     /// </summary>
     public int ContextWindow { get; set; } = 128_000;
+
+    /// <summary>
+    /// Pre-write file snapshots from this session — populated by <see cref="WriteFileTool"/> and
+    /// <see cref="EditFileTool"/>, drained by the host's <c>/undo</c> command. In-memory only.
+    /// </summary>
+    public FileHistory History { get; } = new();
 }
