@@ -26,6 +26,13 @@ see below.)
   `SessionState`; tighten the denial text. The kernel already returns a clean,
   distinct denial for exactly this. **Highest-impact near-term item — it currently blocks
   real edits.**
+- [ ] **Minimal system prompt (user-editable)** — FreeAgent injects *no* system prompt today, so
+  the model is ungrounded (it narrates, and invents an approval UI that doesn't exist). Add a
+  built-in default telling the model what it is, the working directory, the tools available, and how
+  the host actually behaves (denied = denied; be concise), loaded from a **user-editable file**
+  (`~/.config/freeagent/system.md`, with an optional project-level `.freeagent/system.md` override)
+  so it can be customized. The fuller **System-prompt assembly** below (project file + git status +
+  memory) layers on top later.
 - [ ] **Local-server providers** — Ollama already works via
   `OPENAI_BASE_URL=http://localhost:11434/v1`; consider a native Ollama provider for its
   non-OpenAI features (a recipe is in `docs/usage.md`).
