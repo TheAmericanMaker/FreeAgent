@@ -39,11 +39,21 @@ something narrower.
 
 ## Configuration
 
-| Variable          | Required | Default                     | Notes                                               |
-| ----------------- | :------: | --------------------------- | --------------------------------------------------- |
-| `OPENAI_API_KEY`  |   yes    | —                           | Without it the host exits with code 1 immediately.  |
+The active provider is picked by **`FREEPROVIDER`** (default `openai`); supported values are
+`openai`, `anthropic`, `azure`, `ollama`, `bedrock`, `vertex`. The host's bootstrap check
+requires an API key for `openai` / `anthropic` / `azure`; `ollama` is unauthenticated and
+`bedrock` / `vertex` use the ambient cloud credential chain.
+
+OpenAI / OpenAI-compat (the default):
+
+| Variable          | Required | Default                     | Notes                                                |
+| ----------------- | :------: | --------------------------- | ---------------------------------------------------- |
+| `OPENAI_API_KEY`  |   yes    | —                           | Without it the host exits with code 1.              |
 | `OPENAI_BASE_URL` |    no    | `https://api.openai.com/v1` | `/chat/completions` is appended; trailing slash ok. |
 | `FREEMODEL`       |    no    | `gpt-4o-mini`               | Sent as the `model` in the request body.            |
+
+For Anthropic / Azure / Ollama / Bedrock / Vertex env vars, see the [README configuration
+section](../README.md#configuration); the recipes below cover the typical setup for each.
 
 ### Pointing at other OpenAI-compatible servers
 
@@ -156,20 +166,35 @@ freeagent
 ```
 
 - The model's text streams as it arrives.
-- It may call tools — `ReadFile`, `WriteFile`, `ProcessExec`, `Glob`, `Grep`, or the
-  plan-mode toggles; allowed calls run and their results feed back into the same turn
-  automatically.
+- It may call tools — `ReadFile`, `WriteFile`, `EditFile`, `MultiEditFile`, `ApplyPatch`,
+  `ProcessExec`, `Glob`, `Grep`, `CSharpAnalysis`, `ReadMemory`, `WriteMemory`,
+  `ReadArtifact`, `SpawnAgent`, the plan-mode toggles, plus any configured
+  `mcp__{server}__{tool}` and `lsp__{server}__{action}`. Allowed calls run and their results
+  feed back into the same turn automatically.
 - **Ctrl+C** cancels the in-progress turn and returns you to the prompt — it does
   *not* kill the process while a turn is running.
 - `exit`, `quit`, or end-of-input ends the session.
 
 ### Commands
 
-Input starting with `/` is a host command (not sent to the model):
+Input starting with `/` is a host command (not sent to the model). Type `/commands` for the
+full list with fuzzy filter, or `/help` for the inline cheat sheet.
 
-- `/plan` — toggle plan mode; `/plan on` / `/plan off` set it explicitly. In plan mode
-  only read-only tools run, so the agent can explore and propose changes without making
-  any. The model can also toggle this itself via the `EnterPlanMode` / `ExitPlanMode` tools.
+| Command                            | What it does                                                                              |
+| ---------------------------------- | ----------------------------------------------------------------------------------------- |
+| `/help`                            | Inline help text listing every command.                                                   |
+| `/status`                          | Session id, model, working directory, message count, iterations, plan mode, tags.         |
+| `/model`                           | Active model + how to change it.                                                          |
+| `/plan [on\|off]`                   | Toggle plan mode (only read-only tools run). Model can also call `EnterPlanMode` / `ExitPlanMode`. |
+| `/undo`                            | Roll back the most recent agent-driven file change (uses `SessionState.History`).         |
+| `/revert [N]`                      | Drop the last `N` user turns from the transcript (files unchanged — pair with `/undo`).   |
+| `/tag <name>` / `/untag <name>`    | Manage session tags (visible in `/status` and `/doctor`).                                  |
+| `/run <playbook> [args]`           | Render a Markdown playbook with `{{argN}}` substitution and dispatch it as a turn.        |
+| `/doctor`                          | One-shot diagnostic: provider, model, base URL, tool inventory, sub-agent roles.          |
+| `/serve start <model-path> [...]`  | Spawn `llama-server` (or any OpenAI-compat binary) and print the `OPENAI_BASE_URL` line.  |
+| `/serve stop` / `/serve status`    | Kill the recorded server / report its status.                                             |
+| `/fork`                            | Snapshot the current transcript to `session-fork-<id>.jsonl` for branching.               |
+| `/commands [query]`                | Fuzzy command palette (same registry the future TUI binds against).                       |
 
 ### Verbose mode
 
@@ -254,22 +279,50 @@ kernel's `JsonlSessionStore`.
 
 ## Exit codes
 
-| Code | Meaning                                             |
-| ---- | --------------------------------------------------- |
-| 0    | Normal exit (`exit`/`quit`/EOF); session saved.     |
-| 1    | `OPENAI_API_KEY` was not set.                       |
+| Code | Meaning                                                                                            |
+| ---- | -------------------------------------------------------------------------------------------------- |
+| 0    | Normal exit (`exit`/`quit`/EOF); session saved.                                                    |
+| 1    | The active provider's API key was not found in env or config (skipped for `ollama`/`bedrock`/`vertex`). |
 
 ## Troubleshooting
 
-- **`Error: OPENAI_API_KEY is not set.`** — export the key (any non-empty value for
-  servers that don't check it).
+- **`Error: no API key found for provider 'openai'.`** — export the matching key
+  (`OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `AZURE_OPENAI_API_KEY`), or add it to the user config
+  at `~/.config/freeagent/config.json`. For `bedrock` / `vertex`, make sure the cloud credential
+  chain is set up (`aws configure`, `gcloud auth application-default login`).
 - **`[Error: OpenAI API returned 401 …]`** — bad/empty key for a server that does
   check it, or wrong `OPENAI_BASE_URL`.
 - **`[Error: OpenAI API returned 404 …]`** — base URL is missing the `/v1` segment,
   or the model name is wrong for the endpoint.
+- **`[Error: Bedrock API returned …]` / `[Error: Vertex API returned …]`** — the cloud
+  credentials authenticated but the model isn't enabled in the region/project, or the model id
+  is wrong for that endpoint.
 - **A tool keeps coming back `PermissionDenied`** — that capability isn't auto-allowed
-  by default (e.g. any write, or a non-safe binary). That's the safety model working;
-  add an allow rule in code to grant it.
-- **`[Doom loop detected — turn ended early]`** — the model repeated the identical
-  tool call three times; the runtime broke the loop. Rephrase or give it more
-  context.
+  by default (any write, a non-safe binary). That's the safety model working; add an
+  allow rule in `.freeagent/config.json` (see "Granting more with a config file" above).
+- **`[Doom loop detected …]`** — the model repeated the identical tool call three
+  times; the runtime broke the loop, then re-prompted up to three times. Rephrase or
+  give the agent more context.
+
+## The protocol server (`FreeAgent.Server`)
+
+If you want to drive FreeAgent from something other than the CLI — a TUI, an editor extension,
+a web frontend — start the HTTP + SSE server instead:
+
+```bash
+dotnet run --project src/FreeAgent.Server                              # listens on http://localhost:5000
+FREEAGENT_SERVER_API_KEY=secret dotnet run --project src/FreeAgent.Server   # require Authorization: Bearer
+```
+
+Endpoints (full schema at `GET /openapi/v1.json`):
+
+| Method   | Path                          | Notes                                                                  |
+| -------- | ----------------------------- | ---------------------------------------------------------------------- |
+| `POST`   | `/sessions`                   | Body `{ workingDirectory?: string }` → `{ sessionId, workingDirectory }`. |
+| `GET`    | `/sessions`                   | Returns the list of live session ids.                                  |
+| `GET`    | `/sessions/{id}`              | State summary: message count, plan mode, tags, iterations.             |
+| `POST`   | `/sessions/{id}/turns`        | Body `{ userInput }` → SSE: `event: text\|thinking\|tool_call\|tool_result\|usage`, then `event: done` with the assembled reply. |
+| `DELETE` | `/sessions/{id}`              | Remove the session from the in-memory registry.                        |
+
+The same `ProviderConfig` (env vars + `~/.config/freeagent/config.json`) selects the provider for
+both the CLI and the server.

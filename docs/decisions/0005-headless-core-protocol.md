@@ -1,6 +1,9 @@
 # 0005: Headless core + protocol, with pluggable frontends
 
-Status: Accepted (target architecture; adopted in phases)
+Status: Accepted; phases 1 and 2 adopted (in-process features kept frontend-agnostic; the
+`FreeAgent.Server` HTTP + SSE protocol surface ships with an OpenAPI spec at `/openapi/v1.json`
+and an `IEventSink`-bridging `HttpSseEventSink`). Phase 3 (Bun/opentui TUI client) remains
+deferred — see "Phasing" below.
 
 ## Context
 
@@ -34,12 +37,16 @@ OpenAI-compatible server, point the existing provider at it) — never an embedd
 
 ## Phasing (so this is additive, not a rewrite)
 
-1. Keep building near-term/coming-next features **in-process**; keep `SessionRuntime` / `IEventSink`
-   / input strictly frontend-agnostic so the seam stays clean.
-2. Add a **protocol server** project that hosts `SessionRuntime` and bridges `IEventSink` + input to
-   HTTP + SSE, emitting an OpenAPI spec. The kernel does not change.
-3. Build the first protocol **frontend** — a Bun/opentui TUI client (opencode-style). The existing
-   console host remains the minimal built-in/fallback client.
+1. ✅ **Done.** Near-term features were built in-process while `SessionRuntime` / `IEventSink` /
+   input stayed frontend-agnostic. `SessionRuntime.SwapEventSink` was added as the per-request
+   sink swap the server needs.
+2. ✅ **Done.** `FreeAgent.Server` ships as a separate project — ASP.NET Core minimal API with
+   `POST /sessions`, `GET /sessions[/id]`, `POST /sessions/{id}/turns` (SSE-streamed via
+   `HttpSseEventSink`), `DELETE /sessions/{id}`, plus `GET /openapi/v1.json` for the contract.
+   Optional bearer-token gate via `FREEAGENT_SERVER_API_KEY`. The kernel did not change shape.
+3. ⏳ **Deferred.** A Bun/opentui TUI client is still the right direction; the registry layer
+   it'll bind against (`CommandRegistry` + `/commands` palette) is in place. The existing console
+   host remains the minimal built-in/fallback client.
 
 ## Consequences
 

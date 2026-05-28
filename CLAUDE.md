@@ -16,11 +16,23 @@ dotnet test FreeAgent.slnx --filter "FullyQualifiedName~OpenAIProviderTests"
 dotnet test FreeAgent.slnx --filter "FullyQualifiedName~DoomLoop"   # matches by method name
 ```
 
-Running the CLI: provider is selected by **`FREEPROVIDER`** (`openai` default, or `anthropic`).
-The active provider's key/base-url/model come from env (`OPENAI_API_KEY`/`ANTHROPIC_API_KEY`,
-`OPENAI_BASE_URL`/`ANTHROPIC_BASE_URL`, `FREEMODEL`) or
-`$XDG_CONFIG_HOME/freeagent/config.json`. The process's **current directory is the agent's sandbox**
-and where `session.jsonl` is written — launch from the directory you want it to operate on.
+Running the CLI: provider is selected by **`FREEPROVIDER`** — `openai` (default), `anthropic`,
+`azure`, `ollama`, `bedrock`, or `vertex`. The active provider's key / base-url / model come from
+env (`OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `AZURE_OPENAI_*` / `OLLAMA_HOST` / AWS or GCP
+credential chain, `FREEMODEL`) or `$XDG_CONFIG_HOME/freeagent/config.json`. Ollama / Bedrock /
+Vertex skip the API-key bootstrap check (Ollama is unauthenticated; Bedrock + Vertex use the
+ambient cloud credential chain). The process's **current directory is the agent's sandbox** and
+where `session.jsonl` is written — launch from the directory you want it to operate on.
+
+Running the protocol server (`FreeAgent.Server` — HTTP + SSE surface per ADR 0005):
+
+```bash
+dotnet run --project src/FreeAgent.Server                     # http://localhost:5000
+FREEAGENT_SERVER_API_KEY=secret dotnet run --project src/FreeAgent.Server   # require Bearer auth
+```
+
+Endpoints: `POST /sessions`, `GET /sessions`, `GET /sessions/{id}`, `POST /sessions/{id}/turns`
+(SSE-streamed), `DELETE /sessions/{id}`, plus `GET /openapi/v1.json`.
 
 ## Two project-wide conventions that will trip you up
 
@@ -34,25 +46,28 @@ and where `session.jsonl` is written — launch from the directory you want it t
 ## Architecture
 
 FreeAgent is **kernel-first**: `FreeAgent.Kernel` is the product (a deterministic, fully-tested
-agent core), `FreeAgent.Host` is a thin CLI shell over it, and `FreeAgent.Kernel.Tests` exercises
-it. The kernel holds **no global/static mutable state** and reaches the outside world only through
+agent core), `FreeAgent.Host` is a thin CLI shell over it, `FreeAgent.Server` is the HTTP + SSE
+protocol surface (ADR 0005), and `FreeAgent.Kernel.Tests` exercises everything via xUnit. The
+kernel holds **no global/static mutable state** and reaches the outside world only through
 interfaces — that is what makes it testable against fakes with no network, model, or real
-filesystem. Per **ADR 0005**, keep `SessionRuntime` / `IEventSink` / input frontend-agnostic so a
-protocol server (and additional frontends) can be added later as an *additive* server project.
+filesystem.
 
-| Seam (`I…`)              | Default impl                          | Test fake                            |
-| ------------------------ | ------------------------------------- | ------------------------------------ |
-| `IProvider`              | `OpenAIProvider`, `AnthropicProvider` | `FakeProvider` + `StreamScript`      |
-| `ITool`                  | many adapters (see below)             | `FakeTool`                           |
-| `IPermissionEngine`      | `PermissionEngine`                    | `RecordingPermissionEngine`          |
-| `IPermissionApprover`    | `ConsoleApprover` (host)              | `FakeApprover`                       |
-| `IPersistenceStore`      | `JsonlSessionStore` / `NoOpPersistenceStore` | `InMemorySessionStore`        |
-| `IAtomicFileSystem`      | `LinuxAtomicFileSystem`               | `RecordingAtomicFileSystem`          |
-| `IEventSink`             | `ConsoleEventSink` / `NullEventSink`  | `RecordingEventSink`                 |
-| `IToolResultCache`       | `InMemoryToolResultCache`             | (real impl, in-memory)               |
-| `IArtifactStore`         | `InMemoryArtifactStore`               | (real impl, in-memory)               |
-| `IHookRunner`            | `HookRunner`                          | (real + `FakeShell`)                 |
-| `IShellExecutor`         | `BashShellExecutor` (host)            | `FakeShell`                          |
+| Seam (`I…`)              | Default impl                                                                       | Test fake                            |
+| ------------------------ | ---------------------------------------------------------------------------------- | ------------------------------------ |
+| `IProvider`              | `OpenAIProvider`, `AnthropicProvider`, `AzureOpenAIProvider`, `OllamaProvider`, `BedrockProvider`, `VertexProvider` | `FakeProvider` + `StreamScript`      |
+| `ITool`                  | many adapters (see below)                                                          | `FakeTool`                           |
+| `IPermissionEngine`      | `PermissionEngine`                                                                 | `RecordingPermissionEngine`          |
+| `IPermissionApprover`    | `ConsoleApprover` (host)                                                           | `FakeApprover`                       |
+| `IPersistenceStore`      | `JsonlSessionStore` / `NoOpPersistenceStore`                                       | `InMemorySessionStore`               |
+| `IAtomicFileSystem`      | `LinuxAtomicFileSystem`                                                            | `RecordingAtomicFileSystem`          |
+| `IEventSink`             | `ConsoleEventSink` / `NullEventSink` / `HttpSseEventSink` (server)                 | `RecordingEventSink`                 |
+| `IToolResultCache`       | `InMemoryToolResultCache`                                                          | (real impl, in-memory)               |
+| `IArtifactStore`         | `InMemoryArtifactStore`                                                            | (real impl, in-memory)               |
+| `IHookRunner`            | `HookRunner`                                                                       | (real + `FakeShell`)                 |
+| `IShellExecutor`         | `BashShellExecutor` (host)                                                         | `FakeShell`                          |
+| `IJsonRpcTransport`      | base shape; framing is the impl's job                                              | per-protocol fakes                   |
+| `IMcpTransport`          | `StdioMcpTransport` (host, newline-delimited)                                      | in-memory `FakeTransport`            |
+| `ILspTransport`          | `StdioLspTransport` (host, `Content-Length` framing)                               | in-memory `FakeLspTransport`         |
 
 ### The turn loop
 
@@ -111,9 +126,45 @@ permission rules plus `hooks` (`preToolUse` / `postToolUse` / `sessionStart`).
 
 ### Built-in tools
 
-Registered by the host: `ReadFile`, `WriteFile`, `EditFile` (string-replace), `MultiEditFile`
-(atomic batch), `ProcessExec`, `Glob`, `Grep` (managed, no `rg`), `EnterPlanMode` / `ExitPlanMode`,
-`ReadMemory` / `WriteMemory` (XDG memory store), `ReadArtifact`, `SpawnAgent` (sub-agents).
+Registered by the host: `ReadFile`, `WriteFile`, `EditFile` (string-replace, unique-match),
+`MultiEditFile` (atomic batch), `ApplyPatch` (unified-diff with public `ParseHunks`),
+`ProcessExec` (30s timeout, kills tree on cancel), `Glob` / `Grep` (managed, no `rg`),
+`CSharpAnalysis` (Roslyn — syntactic `list-types` / `list-members` / `diagnostics`, plus
+semantic `find-references` / `find-definition` / `semantic-diagnostics`), `EnterPlanMode` /
+`ExitPlanMode`, `ReadMemory` / `WriteMemory` (XDG memory store), `ReadArtifact`, `SpawnAgent`
+(sub-agents). Optional, registered when configured: `mcp__{server}__{tool}` per MCP server
+(`.freeagent/config.json#mcp.servers`), `lsp__{server}__{hover|definition|references|open}` per
+LSP server (`#lsp.servers`).
+
+### MCP + LSP (JSON-RPC over stdio)
+
+Shared `IJsonRpcTransport` seam wraps the framing — newline-delimited for MCP, `Content-Length`
+headered for LSP — so `JsonRpcClient` (background read loop, id-keyed completion dispatch) is
+reusable. `McpClient` (`initialize` + `tools/list` + `tools/call`) feeds `McpToolAdapter`;
+`LspClient` (`initialize` + `didOpen` + `hover` / `definition` / `references`) feeds
+`LspToolAdapter`. `McpServerManager` / `LspServerManager` spawn the configured child processes at
+host startup and register the resulting tools. Capability per call is a `ProcessExecCap` scoped to
+`mcp:{server}` / `lsp:{server}` so a whole server can be allow- or deny-ruled as a unit. Both have
+one `[Skip]`'d end-to-end smoke test for an xUnit / background-read-loop interaction; the protocol
+itself is exercised by the adapter unit tests.
+
+### Provider matrix
+
+- **`OpenAIProvider`** + **`AzureOpenAIProvider`** + **`OllamaProvider`** (OpenAI-compat path)
+  share `OpenAICompatStreaming` (SSE body builder + parser).
+- **`AnthropicProvider`** — native Messages API; emits `thinking_delta` / `text_delta` /
+  `input_json_delta`; supports extended thinking with `FREE_THINKING_BUDGET` (auto-bumps
+  `max_tokens` headroom).
+- **`OllamaProvider`** (native) — `/api/chat` newline-delimited JSON; optional `num_ctx` /
+  `temperature` via `FREE_NUM_CTX` / `FREE_TEMPERATURE`.
+- **`BedrockProvider`** — `AWSSDK.BedrockRuntime` SDK wrapper for Anthropic-on-Bedrock; SigV4 +
+  AWS event-stream parsing are the SDK's job; auth from default AWS credential chain.
+- **`VertexProvider`** — Anthropic-on-Vertex; `Google.Apis.Auth` ADC for the bearer token; URL
+  pattern `…-aiplatform.googleapis.com/.../publishers/anthropic/models/…:streamRawPredict`.
+- **`Model`** record + **`ModelCatalog`** keyed by `wire-api/id` for capability flags (context
+  tokens, default max-output, supports tools / vision / thinking).
+- **`StopReason`** enum on every `StreamChunk` (`EndTurn` / `ToolUse` / `MaxTokens` /
+  `StopSequence` / `Refusal` / `Unknown`) — every provider maps its wire-specific finish reason.
 
 ### Sub-agents
 
@@ -147,16 +198,23 @@ only, *not* persisted): `PlanMode`, `SessionApprovals` (granted capability types
   failures to `ToolResult` classes rather than throwing. Register it in
   `src/FreeAgent.Host/Program.cs`. For file-walking/glob, reuse `WorkspaceSearch` (see
   `GlobTool`/`GrepTool`); for in-place edits prefer `EditFileTool`'s unique-match pattern.
-- **A new provider:** implement `IProvider.StreamChatAsync` yielding `StreamChunk`s; mirror
-  `OpenAIProvider` or `AnthropicProvider` (SSE parsing, per-id tool-call accumulation,
-  cache-aware `Usage` extraction). Add a provider key to `ProviderConfig.ResolveProvider` /
-  `SettingsFor` and have `Program` instantiate it.
+- **A new provider:** implement `IProvider.StreamChatAsync` yielding `StreamChunk`s; mirror one of
+  the six existing adapters under `Providers/Adapters/` — `OpenAIProvider` /
+  `AzureOpenAIProvider` / `OllamaProvider` are the OpenAI-compat shape (share
+  `OpenAICompatStreaming`), `AnthropicProvider` is native Messages-API, `BedrockProvider` wraps
+  the AWS SDK, `VertexProvider` uses Google ADC. Map your wire-specific finish reason to
+  `StopReason`. Add the provider key to `ProviderConfig.ResolveProvider` / `SettingsFor`, and
+  have both `src/FreeAgent.Host/Program.cs` (CLI bootstrap) **and**
+  `src/FreeAgent.Server/ProviderFactory.cs` (protocol server) instantiate it.
 - **A new sub-agent role:** `AgentRegistry.Register(new AgentDefinition(Type, AllowedTools, Prompt))`
   in the host. Tools you list must already be registered in the parent registry.
+- **A new host command:** add a `case "/foo":` in `HostCommands.Handle`, implement the body as a
+  static method (testable), and register the metadata in `HostCommands.BuildDefaultRegistry` so
+  `/commands` and the future TUI palette pick it up.
 
 ## Reference docs
 
-- `README.md`, `docs/architecture.md`, `docs/usage.md` — overview, deep tour, CLI usage.
+- `README.md`, `docs/architecture.md`, `docs/usage.md` — overview, deep tour, CLI + server usage.
 - `docs/codecarto/reimplementation-spec.md` — the **canonical behavioral contract** the kernel
   implements; code comments cite its section names ("contracts §…").
 - `docs/decisions/` — ADRs (kernel-first, Linux-native-first, extension-first capabilities,

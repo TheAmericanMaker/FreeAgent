@@ -41,18 +41,23 @@ The largest is OpenAIProvider.cs at 307 lines …
 
 ## Why FreeAgent
 
-- **Provider-agnostic.** Any OpenAI-compatible `/chat/completions` server works —
-  hosted OpenAI, a gateway, or a local model server. Point `OPENAI_BASE_URL` at it
-  and set `FREEMODEL`. That freedom is where the name comes from.
+- **Provider-agnostic.** Native adapters for OpenAI, Anthropic, Azure OpenAI, Ollama,
+  AWS Bedrock, and Google Vertex AI — any OpenAI-compatible `/chat/completions`
+  endpoint (Groq, gateways, local servers) also works through the OpenAI path. That
+  freedom is where the name comes from.
 - **Safe by construction.** Tools never act before the permission engine approves
   the specific *capabilities* a call needs. Some binaries (`sudo`, `chmod`, …) and
   write paths (`/etc`, `/usr`, …) are blocked unconditionally and cannot be
   re-enabled by an allow rule.
 - **Deterministic and testable.** The kernel has no global state and no hidden I/O.
   Providers, tools, the clock-free permission engine, and the filesystem are all
-  interfaces, so the 135-test suite runs entirely against fakes.
+  interfaces, so the 422-test suite runs entirely against fakes (plus two `[Skip]`'d
+  MCP / LSP smoke tests that pass in isolation).
 - **Crash-safe.** Sessions persist to JSONL through an atomic write-temp → fsync →
   rename → fsync-dir sequence, so a crash mid-write never corrupts the transcript.
+- **Frontend-agnostic.** Per ADR 0005, the kernel is headless; `FreeAgent.Host`
+  is one frontend (interactive CLI) and `FreeAgent.Server` is another (HTTP + SSE
+  protocol with an OpenAPI spec at `/openapi/v1.json`).
 
 ## Install
 
@@ -86,8 +91,8 @@ The directory you launch from is the agent's sandbox.
 ## Quick start (from source, without installing)
 
 ```bash
-dotnet build FreeAgent.slnx     # build
-dotnet test  FreeAgent.slnx     # 185 tests, all green
+dotnet build FreeAgent.slnx     # build everything (warnings are errors)
+dotnet test  FreeAgent.slnx     # 422 pass + 2 skip (MCP + LSP smoke tests)
 OPENAI_API_KEY=sk-... dotnet run --project src/FreeAgent.Host
 ```
 
@@ -186,7 +191,7 @@ Google Vertex AI (`FREEPROVIDER=vertex`, auth from GCP Application Default Crede
 
 At the prompt, slash commands handle host-side concerns (not sent to the model):
 `/help`, `/status`, `/model`, `/plan [on|off]`, `/undo`, `/revert [N]`, `/tag <n>`, `/untag <n>`,
-`/run <playbook>`, `/doctor`, `/serve {start|stop|status}`, `/fork`.
+`/run <playbook>`, `/doctor`, `/serve {start|stop|status}`, `/fork`, `/commands [query]`.
 
 ### Provider settings without env vars
 
@@ -282,26 +287,28 @@ A genuinely stuck turn that somehow escapes the guard is ultimately bounded by t
 
 Every tool call traverses `ToolPipeline.ExecuteAsync` as a fixed 12-step sequence.
 A failure short-circuits *before* any side-effecting step runs, and an exception
-never escapes the pipeline — it is mapped to a result class. Steps marked *(seam)*
-are deliberate, logged no-ops today: they reserve the place for a future extension.
+never escapes the pipeline — it is mapped to a result class. **All twelve steps now
+do real work** (the table below documents what each step does today; nothing in the
+pipeline is a no-op).
 
-| #  | Step             | Behavior                                                                 |
-| -- | ---------------- | ------------------------------------------------------------------------ |
-| 1  | parse            | Parse `ArgumentsJson`; bad JSON → `InvalidInput` (never throws).         |
-| 2  | schema-validate  | Resolve the tool; unknown tool → `InvalidInput`; validate args vs schema.|
-| 3  | sanity-check     | *(seam)* path-escape / workspace-boundary checks.                        |
-| 4  | plan-mode-guard  | If `PlanMode` is on, a non-read-only tool is `PlanModeBlocked` here.      |
-| 5  | permission       | Gather capabilities; the engine decides; deny → `PermissionDenied`.      |
-| 6  | cache-lookup     | *(seam)* read-only result cache.                                         |
-| 7  | pre-hook         | *(seam)* non-fatal pre-execution hook.                                   |
-| 8  | execute          | Run the tool; cancellation → `Cancelled`, exception → `Crash`.           |
-| 9  | post-hook        | *(seam)* non-fatal post-execution hook.                                  |
-| 10 | artifact-store   | *(seam)* offload large success previews.                                 |
-| 11 | cache-write      | *(seam)* persist read-only successes.                                    |
-| 12 | invalidate       | *(seam)* invalidate caches after mutating tools.                         |
+| #  | Step             | Behavior                                                                                          |
+| -- | ---------------- | ------------------------------------------------------------------------------------------------- |
+| 1  | parse            | Parse `ArgumentsJson`; bad JSON → `InvalidInput` (never throws).                                  |
+| 2  | schema-validate  | Resolve the tool; unknown tool → `InvalidInput`; validate args vs the tool's JSON Schema.         |
+| 3  | sanity-check     | Path-escape / workspace-boundary checks.                                                          |
+| 4  | plan-mode-guard  | If `PlanMode` is on, a non-read-only tool is `PlanModeBlocked` here, before any capability check. |
+| 5  | permission       | `IPermissionEngine.Decide`; `Prompt` outcomes ask `IPermissionApprover` with session-grant memory.|
+| 6  | cache-lookup     | `IToolResultCache`: a hit on a read-only tool returns the cached `Success` without re-executing.  |
+| 7  | pre-hook         | `IHookRunner` fires matching `PreToolUse` hooks from `.freeagent/config.json`.                    |
+| 8  | execute          | Run the tool; cancellation → `Cancelled`, exception → `Crash`.                                    |
+| 9  | post-hook        | Matching `PostToolUse` hooks; non-fatal.                                                          |
+| 10 | artifact-store   | `Success` content larger than the artifact threshold (10k chars) is offloaded to `IArtifactStore`; the result is replaced with a preview + opaque ref the model fetches via the `ReadArtifact` tool. |
+| 11 | cache-write      | Read-only `Success` results land in `IToolResultCache`.                                           |
+| 12 | invalidate       | A successful **mutating** tool invalidates the read-only cache.                                   |
 
 A tool that succeeds but returns blank content is reported as `Empty`, so the model
-gets a distinct signal rather than an ambiguous empty success.
+gets a distinct signal rather than an ambiguous empty success. Every step appends to
+the pipeline's `StepLog` under a lock, so traversal order is observable and tested.
 
 **Result taxonomy.** Every result is one of: `Success`, `InvalidInput`,
 `PermissionDenied`, `PlanModeBlocked`, `StateConflict`, `Crash`, `Empty`,
@@ -352,22 +359,35 @@ The host registers these adapters. Each carries a model-facing description (sent
 the function description) and declares whether it is read-only and concurrency-safe (which drives the
 parallel/serial scheduling above) and which capability it needs.
 
-| Tool            | Args                                   | Read-only | Capability        | Notes                                                                 |
-| --------------- | -------------------------------------- | :-------: | ----------------- | --------------------------------------------------------------------- |
-| `ReadFile`      | `path`                                 |    yes    | `FileReadCap`     | UTF-8 read; auto-allowed inside the workspace.                        |
-| `WriteFile`     | `path`, `content`                      |    no     | `FileWriteCap`    | Creates parent dirs; never auto-allowed; protected prefixes blocked.  |
-| `EditFile`      | `path`, `old_string`, `new_string`, `replace_all?` | no | `FileWriteCap` | In-place edit by literal substring; unique-match required (opt-in `replace_all`); preserves untouched content. Snapshots for `/undo`. |
-| `ProcessExec`   | `command`, `args?`                     |    no     | `ProcessExecCap`  | Runs in the workspace; 30s timeout kills the process tree; returns exit code + stdout/stderr. |
-| `Glob`          | `pattern`, `path?`                     |    yes    | `FileReadCap`     | Find files by glob (`**/*.cs`); managed (no `rg`); skips noise dirs; capped. |
-| `Grep`          | `pattern`, `path?`, `glob?`, `ignore_case?` | yes  | `FileReadCap`     | Regex content search → `path:line:text`; skips binary files; capped.  |
-| `EnterPlanMode` | —                                      |    yes    | none              | Turns plan mode on (only read-only tools run until exit).             |
-| `ExitPlanMode`  | —                                      |    yes    | none              | Turns plan mode off; read-only so it is callable while plan mode is active. |
-| `ReadMemory`    | `key`                                  |    yes    | `MemoryCap` read  | Read a cross-session memory entry (`~/.config/freeagent/memory`). Auto-allowed. |
-| `WriteMemory`   | `key`, `content`                       |    no     | `MemoryCap` write | Save/overwrite a memory entry. Not auto-allowed (interactive approval). |
+| Tool             | Args                                                                  | Read-only | Capability         | Notes                                                                                                                              |
+| ---------------- | --------------------------------------------------------------------- | :-------: | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `ReadFile`       | `path`                                                                |    yes    | `FileReadCap`      | UTF-8 read; auto-allowed inside the workspace.                                                                                     |
+| `WriteFile`      | `path`, `content`                                                     |    no     | `FileWriteCap`     | Creates parent dirs; never auto-allowed; protected prefixes blocked.                                                               |
+| `EditFile`       | `path`, `old_string`, `new_string`, `replace_all?`                    |    no     | `FileWriteCap`     | In-place edit by literal substring; unique-match required (opt-in `replace_all`). Snapshots for `/undo`.                            |
+| `MultiEditFile`  | `path`, `edits[]`                                                     |    no     | `FileWriteCap`     | Atomic batch of `EditFile` operations on the same file; rolls back if any edit fails.                                              |
+| `ApplyPatch`     | `path`, `patch`                                                       |    no     | `FileWriteCap`     | Apply a unified diff; `ParseHunks` is public for tests.                                                                            |
+| `ProcessExec`    | `command`, `args?`                                                    |    no     | `ProcessExecCap`   | Runs in the workspace; 30s timeout kills the process tree; returns exit code + stdout/stderr.                                      |
+| `Glob`           | `pattern`, `path?`                                                    |    yes    | `FileReadCap`      | Find files by glob (`**/*.cs`); managed (no `rg`); skips noise dirs; capped.                                                       |
+| `Grep`           | `pattern`, `path?`, `glob?`, `ignore_case?`                           |    yes    | `FileReadCap`      | Regex content search → `path:line:text`; skips binary files; capped.                                                               |
+| `CSharpAnalysis` | `action`, `symbol?`, `path?`, `glob?`                                 |    yes    | `FileReadCap`      | Roslyn — syntactic (`list-types` / `list-members` / `diagnostics`) + semantic (`find-references` / `find-definition` / `semantic-diagnostics`). |
+| `EnterPlanMode`  | —                                                                     |    yes    | none               | Turns plan mode on.                                                                                                                |
+| `ExitPlanMode`   | —                                                                     |    yes    | none               | Turns plan mode off; read-only so it's always callable while plan mode is active.                                                  |
+| `ReadMemory`     | `key`                                                                 |    yes    | `MemoryCap` read   | Read a cross-session memory entry (XDG memory dir). Auto-allowed.                                                                  |
+| `WriteMemory`    | `key`, `content`                                                      |    no     | `MemoryCap` write  | Save/overwrite a memory entry. Not auto-allowed.                                                                                   |
+| `ReadArtifact`   | `ref`                                                                 |    yes    | `FileReadCap`      | Fetch full text of an artifact offloaded by step 10.                                                                               |
+| `SpawnAgent`     | `type`, `prompt`                                                      |    no     | `AgentSpawnCap`    | Run a sub-agent against a filtered tool registry; never auto-allowed.                                                              |
 
-`Glob`/`Grep` are read-only **and** concurrency-safe, so they run in the parallel window. Paths are
-resolved against the working directory by the same rule the permission engine uses, so the capability
-checked at step 5 and the path acted on at step 8 always agree.
+Optional, registered only when configured in `.freeagent/config.json`:
+
+- **`mcp__{server}__{tool}`** per MCP tool from each entry under `mcp.servers[]` — capability is
+  `ProcessExecCap("mcp:{server}", ...)`, so a whole server can be allow- or deny-ruled as a unit.
+- **`lsp__{server}__{hover|definition|references|open}`** per LSP server under `lsp.servers[]` —
+  capability is `ProcessExecCap("lsp:{server}", ...)`. Path-extension filter refuses files outside
+  the server's declared extensions before sending the request.
+
+`Glob`/`Grep`/`CSharpAnalysis` are read-only **and** concurrency-safe, so they run in the parallel
+window. Paths are resolved against the working directory by the same rule the permission engine
+uses, so the capability checked at step 5 and the path acted on at step 8 always agree.
 
 ## Session persistence
 
@@ -383,30 +403,64 @@ corrupt transcript — readers see either the old file or the complete new one.
 ## Project layout
 
 ```
-FreeAgent.slnx                     Solution (Kernel, Kernel.Tests, Host)
+FreeAgent.slnx                     Solution (Kernel, Kernel.Tests, Host, Server)
 Directory.Build.props              Shared: net10.0, nullable, implicit usings, warnings-as-errors
 global.json                        Pins the .NET 10 SDK
 
-src/FreeAgent.Kernel/              The kernel library
-  Messaging/      Message, MessageRole, ToolCall, ToolResult
-  Providers/      IProvider, ProviderRequest, StreamChunk, ToolCallDelta, Usage
-    Adapters/     OpenAIProvider (OpenAI-compatible SSE streaming)
-  Tools/          ITool, IToolRegistry, ToolRegistry, ToolPipeline, ToolDefinition, ToolContext
-    Adapters/     ReadFileTool, WriteFileTool, ProcessExecTool, GlobTool, GrepTool,
-                  PlanModeTools, WorkspaceSearch, WorkspacePath
-  Permissions/    IPermissionEngine, PermissionEngine, PermissionConfig, Capability, PermissionDecision
-  Persistence/    IPersistenceStore, JsonlSessionStore, IAtomicFileSystem, LinuxAtomicFileSystem
-  Sessions/       SessionRuntime, SessionState, TurnExecutor, TurnResult
-  Runtime/        IEventSink, DoomLoopDetector
+src/FreeAgent.Kernel/              The kernel library — all types live in one flat
+                                   `FreeAgent.Kernel` namespace regardless of folder
+  Messaging/      Message, MessageRole, ToolCall, ToolResult, ToolResultKind
+  Providers/      IProvider, ProviderRequest, StreamChunk, ToolCallDelta, Usage,
+                  StopReason, Model, ModelCatalog
+    Adapters/     OpenAIProvider, AzureOpenAIProvider, AnthropicProvider, OllamaProvider,
+                  BedrockProvider (AWSSDK), VertexProvider (Google ADC),
+                  OpenAICompatStreaming (shared body/SSE for OpenAI-shape providers)
+  Tools/          ITool, IToolRegistry, ToolRegistry, ToolPipeline, ToolDefinition,
+                  ToolContext, Hooks, IToolResultCache + InMemoryToolResultCache,
+                  IArtifactStore + InMemoryArtifactStore
+    Adapters/     ReadFileTool, WriteFileTool, EditFileTool, MultiEditFileTool, ApplyPatchTool,
+                  ProcessExecTool, GlobTool, GrepTool, CSharpAnalysisTool (Roslyn),
+                  PlanModeTools, MemoryTools, ReadArtifactTool, SpawnAgentTool,
+                  McpToolAdapter, WorkspacePath, WorkspaceSearch, RoslynSemanticHelpers
+  Permissions/    IPermissionEngine, PermissionEngine, PermissionConfig, Capability,
+                  PermissionDecision, IPermissionApprover
+  Persistence/    IPersistenceStore, JsonlSessionStore, NoOpPersistenceStore,
+                  IAtomicFileSystem, LinuxAtomicFileSystem
+  Sessions/       SessionRuntime, SessionState, TurnExecutor, TurnResult, Compactor, FileHistory
+  Runtime/        IEventSink, NullEventSink, DoomLoopDetector
+  Agents/         AgentDefinition, AgentRegistry, SubAgentRunner
+  Mcp/            IJsonRpcTransport, IMcpTransport, ILspTransport, JsonRpcClient, McpClient
+  Lsp/            LspClient, LspToolAdapter
+  Commands/       CommandRegistry, CommandDefinition
   Validation/     ToolInputSchemaValidator
   Serialization/  JsonOptions
 
 src/FreeAgent.Host/                The interactive CLI
-  Program.cs          Env config, permission-config load, tool registration, REPL, /plan, resume
-  HostOptions.cs      Command-line option parsing (--verbose, --resume [id])
-  ConsoleEventSink.cs Streams text to stdout; reasoning/usage gated behind --verbose
+  Program.cs              Provider/tool/sub-agent wiring; REPL loop; resume
+  HostOptions.cs          --verbose, --resume [id], --help, --version
+  HostCommands.cs         All /foo slash commands + CommandRegistry default population
+  ConsoleEventSink.cs     stdout streaming; reasoning + usage behind --verbose
+  ConsoleApprover.cs      IPermissionApprover for the [once/session/always/deny] prompt
+  ProviderConfig.cs       Per-provider env-var + JSON-config resolution
+  Playbooks.cs            Markdown playbook loading + {{argN}} substitution
+  SystemPrompt.cs         Base + working dir + git branch + project file layering
+  BashShellExecutor.cs    IShellExecutor for hooks (bash -c, 30s timeout)
+  StdioMcpTransport.cs    Newline-delimited stdio for MCP servers
+  StdioLspTransport.cs    Content-Length-framed stdio for LSP servers
+  McpServerManager.cs     Spawns mcp.servers[] at startup
+  LspServerManager.cs     Spawns lsp.servers[] at startup
+  ModelServerLauncher.cs  /serve start|stop|status for llama-server-style local servers
+  WorkspaceFileWatcher.cs Opt-in (FREE_WATCH_FILES=1) external-change watcher
+
+src/FreeAgent.Server/              HTTP + SSE protocol surface (ADR 0005)
+  Program.cs              ASP.NET Core minimal API entrypoint + optional bearer auth
+  SessionEndpoints.cs     POST /sessions, GET /sessions[/id], POST /sessions/{id}/turns (SSE), DELETE
+  SessionRegistry.cs      In-memory session map
+  ProviderFactory.cs      Picks IProvider from the same ProviderConfig the CLI uses
+  HttpSseEventSink.cs     IEventSink that streams events into an SSE response
 
 src/FreeAgent.Kernel.Tests/        xUnit + FluentAssertions; fakes for every seam
+                                   (422 pass + 2 skip)
 
 docs/                              Architecture notes, ADRs, and the reimplementation spec
 ```
@@ -415,15 +469,17 @@ docs/                              Architecture notes, ADRs, and the reimplement
 
 ```bash
 dotnet build FreeAgent.slnx        # warnings are errors
-dotnet test  FreeAgent.slnx        # 185 tests
-dotnet run --project src/FreeAgent.Host -- --verbose
+dotnet test  FreeAgent.slnx        # 422 pass + 2 skip (MCP + LSP smoke tests)
+dotnet run --project src/FreeAgent.Host -- --verbose      # interactive CLI
+dotnet run --project src/FreeAgent.Server                 # HTTP + SSE protocol on :5000
 ```
 
 The build treats warnings as errors and enforces code style, so a clean build is a
 real signal. Tests are written against fakes (`FakeProvider`, `FakeTool`,
 `InMemorySessionStore`, `RecordingPermissionEngine`, …) and need no network, model,
-or real filesystem. See `docs/architecture.md` for a deeper tour and
-`docs/usage.md` for host details and recipes.
+or real filesystem; the protocol server is tested with `WebApplicationFactory` in
+process. See `docs/architecture.md` for a deeper tour and `docs/usage.md` for host
+details and recipes.
 
 **Releasing.** Push a `v*` tag (e.g. `git tag v0.1.0 && git push --tags`) to trigger
 `.github/workflows/release.yml`: it tests, packs the tool, attaches self-contained
@@ -446,15 +502,13 @@ The full behavioral contract the kernel implements is in
 
 ## Roadmap & non-goals
 
-See [`ROADMAP.md`](ROADMAP.md) for the full backlog (much of it seeded from
-FreeAgent's OpenMonoAgent.ai lineage). In brief:
-
-The pipeline's *(seam)* steps mark where the next features attach without reworking
-the core: result caching, pre/post hooks, large-artifact offloading, and
-cache invalidation. The permission engine already models capabilities
-(`NetworkEgressCap`, `VcsMutationCap`, `AgentSpawnCap`, `MemoryCap`) that no tool
-exercises yet — networked tools, VCS tooling, sub-agents, and memory are the
-natural next adapters.
+See [`ROADMAP.md`](ROADMAP.md) for the full backlog and what's shipped, and
+[`CHANGELOG.md`](CHANGELOG.md) for a feature-by-feature log. The "near-term" and
+"larger features" sections of the roadmap are now essentially complete; the
+remaining unchecked items all need either the TypeScript / Bun ecosystem
+(opentui TUI client, palette UI, status-line repositioning, colored diff view)
+or external platform integrations (VS Code, ACP, web, Slack/GitHub) that are
+clients of the protocol surface rather than additions to the kernel.
 
 **Now shipped (since the original "out of scope" list above was written):**
 sub-agents, playbooks, **MCP client**, **LSP client** (both `[Skip]`'d
