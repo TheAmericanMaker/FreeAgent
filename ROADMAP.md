@@ -71,18 +71,22 @@ see below.)
 - [ ] **File history & undo** — per-write snapshots, a `/undo`, and session revert to a
   prior turn.
 
-## Architecture decisions to make
+## Architecture direction — decided (see [ADR 0005](docs/decisions/0005-headless-core-protocol.md))
 
-- [ ] **Headless core + protocol, with pluggable frontends** (decide before betting on a TUI).
-  opencode (the current Bun/TypeScript version) shows a clean pattern: a headless agent **server**
-  — an HTTP API described by an **OpenAPI spec** plus an SSE `/event` stream — with the TUI as a
-  pure **client** that holds zero agent logic and can `attach` to a local *or remote* server.
-  Adopting this for FreeAgent (the C# kernel exposes the server; clients are generated from the
-  spec) would make the **TUI, a web frontend, editor integrations, and ACP all clients of one
-  protocol** rather than separate builds — and would let a JS/opentui frontend pair with the C#
-  core without embedding either language in the other. The alternative is keeping a single
-  in-process host with a native .NET TUI embedded directly. **This decision gates the TUI options
-  below.**
+**Target: headless core + protocol, with pluggable frontends.** The C# kernel exposes a server
+(an HTTP API described by an OpenAPI spec + an SSE event stream); the TUI, a web frontend, editors
+(via ACP), and remote access are all **clients of that one protocol** — the opencode pattern (a
+client can `attach` to a local *or* remote server and holds zero agent logic). This is what makes
+the opencode-grade Bun/opentui TUI reachable from a C# core.
+
+Phasing (the kernel is *already* effectively headless — `SessionRuntime` + `IEventSink`):
+
+- [ ] Keep building near-term/coming-next features **in-process** for now; just keep
+  `SessionRuntime` / `IEventSink` / input frontend-agnostic so the seam stays clean.
+- [ ] **Protocol server** — add a server project hosting `SessionRuntime`, bridging `IEventSink`
+  and input to HTTP + SSE, emitting an OpenAPI spec (additive — not a kernel rewrite).
+- [ ] First protocol **frontend** — a Bun/opentui TUI client (opencode-style). The existing
+  console host remains as the minimal built-in/fallback client.
 
 ## On the horizon — integrations & ecosystem
 
@@ -92,29 +96,38 @@ see below.)
   `diagnostics`.
 - [ ] **Roslyn tool** — C# semantic analysis (overview, find-references, callers,
   blast-radius), relevant since FreeAgent itself is C#.
-- [ ] **TUI** — a full-screen renderer beyond the current console `IEventSink`. Two routes,
-  pending the architecture decision above:
-  - **(a) Native .NET TUI** embedded in the host — `Spectre.Console` or `Terminal.Gui`. Single
-    language and process; simplest; no protocol needed.
-  - **(b) Separate frontend over the protocol** — e.g. a Bun/SolidJS app using **opentui** (what
-    opencode uses) attached to the headless core. Note: opentui is **Zig + C-ABI + TypeScript and
-    is not a drop-in for .NET** — P/Invoking its C ABI would mean reimplementing its entire TS
-    framework layer (layout/render-loop/components), so the realistic opentui route is a separate
-    Bun frontend (a polyglot stack). Buys reuse of opentui's components and a shared path with the
-    web/editor frontends, at the cost of a second toolchain.
+- [ ] **TUI (protocol client, opencode-style)** — per ADR 0005, the full-screen TUI is a
+  **frontend client over the protocol**, not embedded in the host: a Bun/SolidJS app using
+  **opentui** (the stack opencode uses) attached to the headless core. opentui is Zig + C-ABI +
+  TypeScript and is *not* a .NET drop-in, which is exactly why the frontend is a separate Bun
+  process talking the protocol rather than embedded. (A native .NET TUI — `Spectre.Console` /
+  `Terminal.Gui` — was the in-process alternative; kept only as a possible minimal fallback
+  renderer.)
 - [ ] **Command palette** — a `ctrl+p` fuzzy command palette backed by a command registry, the
   opencode model: named, dispatchable commands with metadata that feed both keybindings and the
   palette. Supersedes ad-hoc slash-commands (the host already has a command-dispatch seam).
 - [ ] **Status line repositioning** — move the `Session | Model | working dir` line from the top
   to a persistent bottom status bar, with rule lines above and below the input box. *Presentation
-  only; the actual design waits on the TUI route chosen above.*
-- [ ] **Local inference orchestration** — an optional Docker wrapper that launches and
-  manages a llama.cpp (or similar) server, mirroring OpenMono's bundled-server model.
-- [ ] **Vision / multimodal input** — image inputs within a turn.
+  only; lands as part of the TUI client (above) — the current console host keeps the top line.*
+- [ ] **Local model runner (orchestrate, don't embed)** — since every local engine already speaks
+  OpenAI-compatible HTTP (llama.cpp's `llama-server`, Ollama, LocalAI, vLLM, exo, LM Studio),
+  FreeAgent should **download a model + launch/health-check a local server + point its existing
+  provider at it** — not embed a C++/LLamaSharp engine in-process. Default to the light single-binary
+  engines (Ollama or `llama-server`, which can fetch GGUF itself); architecture-neutral, stays pure
+  .NET. What FreeAgent builds: server lifecycle (spawn/health-check/shutdown, port mgmt), a model
+  download/catalog UX, and config mapping. *Pointing at an already-running server is config-only
+  today (see `docs/usage.md`); this item is about owning the download + launch.* exo (distributed,
+  Apple-Silicon/MLX) stays **docs-only** — point at it if you run it.
+- [ ] **Multimodal — far future.** Image gen / speech-to-text / text-to-speech are *not* a near-term
+  goal and stay text/coding-focused for now. When wanted, reach them the same way as LLMs: via a
+  multimodal local server (e.g. **LocalAI**, which already exposes image/STT/TTS behind one
+  OpenAI-compatible API) behind the existing provider — **not** by embedding native engines
+  (whisper.cpp / piper / SD). Lone in-process exception worth noting: `whisper.net` (MIT, mature .NET
+  binding) if voice input ever becomes a real ask.
 - [ ] **Playbooks** — templated, parameterized workflows.
 - [ ] **Editor & remote** — VS Code extension, ACP (Zed), desktop wrapper, web frontend,
-  Slack / GitHub apps. If the headless-core + protocol decision lands, these are all just
-  additional clients of that one protocol rather than separate integrations.
+  Slack / GitHub apps. Per ADR 0005 these are all just additional **clients of the one protocol**,
+  not separate integrations.
 - [ ] **Misc** — extended thinking + token budgets, session tagging/forking, file
   watching during a session, opt-in OpenTelemetry tracing.
 

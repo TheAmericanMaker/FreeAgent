@@ -375,6 +375,7 @@ The reasoning behind the shape of the project lives in `docs/decisions/`:
 - [0002 — Kernel-first implementation strategy](docs/decisions/0002-kernel-first.md)
 - [0003 — Linux-native first](docs/decisions/0003-linux-native-first.md)
 - [0004 — Extension-first capabilities](docs/decisions/0004-extension-first-capabilities.md)
+- [0005 — Headless core + protocol, with pluggable frontends](docs/decisions/0005-headless-core-protocol.md)
 
 The full behavioral contract the kernel implements is in
 `docs/codecarto/reimplementation-spec.md`.
