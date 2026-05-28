@@ -13,6 +13,17 @@ public sealed class JsonRpcClient : IAsyncDisposable, IDisposable
 {
     private readonly IJsonRpcTransport _transport;
     private readonly Dictionary<int, TaskCompletionSource<JsonElement>> _pending = new();
+    /// <summary>
+    /// Buffer for responses whose ids haven't been registered in <see cref="_pending"/> yet.
+    /// In production this is essentially unused — TCS registration in <see cref="CallAsync"/>
+    /// happens before the transport write, so the response can't arrive before the TCS is
+    /// waiting. But against zero-latency in-memory test transports, the response can be
+    /// pre-queued and the read loop can consume it before <see cref="CallAsync"/> finishes
+    /// registering. Buffering covers that race.
+    /// </summary>
+    private readonly Dictionary<int, JsonElement> _earlyResponses = new();
+    /// <summary>Same idea as <see cref="_earlyResponses"/> but for error envelopes.</summary>
+    private readonly Dictionary<int, Exception> _earlyErrors = new();
     private readonly object _gate = new();
     private readonly CancellationTokenSource _shutdown = new();
     private readonly Task _readLoop;
@@ -37,7 +48,22 @@ public sealed class JsonRpcClient : IAsyncDisposable, IDisposable
         {
             id = ++_nextId;
             tcs = new TaskCompletionSource<JsonElement>(TaskCreationOptions.RunContinuationsAsynchronously);
-            _pending[id] = tcs;
+
+            // If the read loop already saw a response for this id (only possible with zero-latency
+            // test transports that pre-queued the response), drain it now instead of registering a
+            // TCS that would never be signalled.
+            if (_earlyErrors.Remove(id, out var earlyError))
+            {
+                tcs.SetException(earlyError);
+            }
+            else if (_earlyResponses.Remove(id, out var earlyResult))
+            {
+                tcs.SetResult(earlyResult);
+            }
+            else
+            {
+                _pending[id] = tcs;
+            }
         }
 
         var json = SerializeEnvelope(method, id, writeParams);
@@ -99,24 +125,42 @@ public sealed class JsonRpcClient : IAsyncDisposable, IDisposable
                         continue; // notification / server-pushed — ignored for v1
 
                     var id = idProp.GetInt32();
-                    TaskCompletionSource<JsonElement>? tcs;
-                    lock (_gate) { _pending.Remove(id, out tcs); }
-                    if (tcs is null) continue;
 
+                    Exception? errorToFire = null;
+                    JsonElement? resultToFire = null;
                     if (root.TryGetProperty("error", out var err))
                     {
                         var code = err.TryGetProperty("code", out var c) ? c.GetInt32() : -1;
                         var msg = err.TryGetProperty("message", out var m) ? m.GetString() ?? "" : "";
-                        tcs.TrySetException(new InvalidOperationException($"JSON-RPC error {code}: {msg}"));
+                        errorToFire = new InvalidOperationException($"JSON-RPC error {code}: {msg}");
                     }
                     else if (root.TryGetProperty("result", out var result))
                     {
-                        tcs.TrySetResult(result.Clone());
+                        resultToFire = result.Clone();
                     }
                     else
                     {
-                        tcs.TrySetResult(default);
+                        resultToFire = default(JsonElement);
                     }
+
+                    TaskCompletionSource<JsonElement>? tcs;
+                    lock (_gate)
+                    {
+                        _pending.Remove(id, out tcs);
+                        if (tcs is null)
+                        {
+                            // No caller is waiting yet — stash it so the next CallAsync with this
+                            // id can pick it up. Only useful against the test transports.
+                            if (errorToFire is not null)
+                                _earlyErrors[id] = errorToFire;
+                            else
+                                _earlyResponses[id] = resultToFire!.Value;
+                        }
+                    }
+
+                    if (tcs is null) continue;
+                    if (errorToFire is not null) tcs.TrySetException(errorToFire);
+                    else tcs.TrySetResult(resultToFire!.Value);
                 }
             }
         }

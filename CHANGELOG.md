@@ -6,6 +6,51 @@ All notable changes to FreeAgent are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed — MCP / LSP smoke tests now run cleanly
+
+- **Root cause**: against a zero-latency in-memory test transport, the `JsonRpcClient` read loop
+  could pop a queued response *before* `CallAsync` registered its `TaskCompletionSource` (in
+  production this can't happen — the TCS is registered before the transport write). The response
+  was then dropped, and the test waited forever.
+- **Fix**: `JsonRpcClient` now buffers responses for unknown ids in `_earlyResponses` /
+  `_earlyErrors`. `CallAsync` drains a matching buffered entry under the same lock that registers
+  the TCS, so even pre-queued responses resolve. Purely additive — production code paths are
+  unchanged because the buffer stays empty there.
+- Both `McpClientTests.EndToEndProtocolFlow` and `LspClientTests.EndToEndProtocolFlow` are now
+  un-skipped and live in the new `JsonRpcCollection` (which keeps them sequential; combined with
+  the buffer fix they run cleanly together). 424 → 445 pass + 0 skip.
+
+### Added — Roslyn `.csproj`-aware references
+
+- **`RoslynSemanticHelpers.WorkspacePackageReferences`** — walks every `obj/project.assets.json`
+  under the working directory (after `dotnet restore`), maps each `targets.*.compile` entry
+  through the `packageFolders` to an absolute DLL path, and returns the resolved
+  `MetadataReference` set. Cached per working directory.
+- **`BuildWorkspaceCompilation` now takes a `workingDirectory`** and merges the runtime references
+  with these workspace package references — so `find-references` / `find-definition` /
+  `semantic-diagnostics` now bind into NuGet packages the project actually depends on (not just
+  the .NET stdlib the host happens to ship).
+- 7 new tests cover: stdlib enumeration, `EnumerateAssetsFiles` discovery + noise-dir skipping,
+  `ResolveAssetsReferences` for existing/missing/non-DLL entries, and the empty-workspace path.
+
+### Added — GGUF download + catalog for `/serve`
+
+- **`/serve download <url-or-hf:owner/repo/path.gguf> [--name <local-name>]`** — streams a GGUF
+  into `$XDG_CACHE_HOME/freeagent/models/`. Writes through a `.part` temp file so an interrupted
+  download leaves no half-file at the model's name; rejects anything that doesn't end in `.gguf`
+  or that contains a path separator. `HF_TOKEN` (when set) is forwarded as a Bearer header for
+  gated HuggingFace repos.
+- **`hf:owner/repo/path/to/file.gguf`** shorthand → expands to
+  `https://huggingface.co/owner/repo/resolve/main/path/to/file.gguf`. Multi-segment paths inside
+  the repo are preserved.
+- **`/serve models`** lists every cached GGUF with sizes.
+- **`/serve start <name>`** now accepts bare catalog names (with or without the `.gguf` extension)
+  in addition to absolute / relative paths — `ModelServerLauncher.ResolveModelName` handles the
+  lookup and returns the input unchanged if nothing matches.
+- 14 new tests cover the `hf:` parser (valid + invalid specs), `ResolveModelName` (existing path
+  passes through, bare name finds catalog entry, unknown name returns input), `ListCatalog`
+  empty-state, and the `/serve download` argument parser.
+
 ### Added — command-palette registry
 
 - **`CommandRegistry` + `CommandDefinition`** — single source of truth for the host's named

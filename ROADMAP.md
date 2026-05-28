@@ -139,8 +139,10 @@ Phasing (the kernel is *already* effectively headless — `SessionRuntime` + `IE
   server at host startup and registers its remote tools as `mcp__{server}__{tool}` via
   `McpToolAdapter` (the adapter requires a `ProcessExecCap("mcp:{server}", ...)` so a whole
   server can be allow- or deny-ruled). Configured via `mcp.servers[]` in `.freeagent/config.json`.
-  Integration smoke test is `[Skip]`'d due to a runner interaction with background-loop disposal
-  across test classes; passes in isolation. End-to-end with real MCP servers untested.
+  Integration smoke test now runs cleanly (root cause: with zero-latency in-memory test transports
+  the read loop could consume a queued response before `CallAsync` had registered its TCS;
+  `JsonRpcClient` now buffers responses for unknown ids so the registration races resolve
+  correctly). End-to-end with real MCP servers still untested.
 - [x] **LSP client** — language-server-backed `hover` / `definition` / `references` (and an
   `open` action to load file text into the server). `ILspTransport` seam alongside the existing
   `IMcpTransport` — both extend a new `IJsonRpcTransport` base so `JsonRpcClient` is reusable for
@@ -150,9 +152,9 @@ Phasing (the kernel is *already* effectively headless — `SessionRuntime` + `IE
   (`lsp__{name}__{hover|definition|references|open}`); `LspServerManager` spawns the configured
   servers at host startup. Configured via `lsp.servers[]` in `.freeagent/config.json`; required
   capability is a `ProcessExecCap("lsp:{server}", …)` so a whole server can be allow- or
-  deny-ruled as a unit (mirrors the MCP adapter shape). End-to-end smoke test is `[Skip]`'d for
-  the same runner interaction the MCP test hits; passes in isolation. Server-pushed
-  `publishDiagnostics` notifications are currently dropped — wire that to a tool in a follow-up.
+  deny-ruled as a unit (mirrors the MCP adapter shape). End-to-end smoke test runs cleanly after
+  the `JsonRpcClient` early-response buffer fix. Server-pushed `publishDiagnostics` notifications
+  are currently dropped — wire that to a tool in a follow-up.
 - [x] **Roslyn tool (syntactic)** — `CSharpAnalysisTool` parses `.cs` files with
   `CSharpSyntaxTree` (no semantic model / metadata references, so the dependency stays parse-only)
   and exposes three actions: `list-types` (one line per class/interface/struct/record/enum/delegate
@@ -164,11 +166,12 @@ Phasing (the kernel is *already* effectively headless — `SessionRuntime` + `IE
   symbol), `find-definition` (declaration site for the requested symbol), and `semantic-diagnostics`
   (compiler errors and warnings — distinct from syntax parse errors). Read-only and
   concurrency-safe; required cap is a `FileReadCap` on the resolved path. Wired into the host
-  registry and the `Explore`/`Plan` sub-agent whitelists. Output capped at 500 lines. *Limitation:
-  metadata references come from the host's assembly graph, not the workspace's `.csproj`, so a
-  reference into a NuGet package the host doesn't ship won't bind — workspace-local symbol queries
-  are fully supported. A `.csproj`-aware reference resolver remains a follow-up. Callers /
-  blast-radius are not yet exposed.*
+  registry and the `Explore`/`Plan` sub-agent whitelists. Output capped at 500 lines.
+  `RoslynSemanticHelpers.WorkspacePackageReferences` walks every `obj/project.assets.json` under
+  the working directory and adds the resolved package DLLs to the compilation, so a reference
+  into a NuGet package the workspace's `.csproj` declares (after `dotnet restore`) now binds —
+  the host's `TRUSTED_PLATFORM_ASSEMBLIES` is still the base. Callers / blast-radius are not yet
+  exposed.
 - [ ] **TUI (protocol client, opencode-style)** — per ADR 0005, the full-screen TUI is a
   **frontend client over the protocol**, not embedded in the host: a Bun/SolidJS app using
   **opentui** (the stack opencode uses) attached to the headless core. opentui is Zig + C-ABI +
@@ -194,8 +197,11 @@ Phasing (the kernel is *already* effectively headless — `SessionRuntime` + `IE
   server is already running reports the existing pid instead of stomping it. Pre-flight checks
   for missing model file, port already in use, and binary not on `$PATH`. On success the REPL
   prints the `OPENAI_BASE_URL=…/v1 FREEMODEL=…` invocation line to point a fresh `freeagent` at
-  it. **Pending follow-ups**: model download/catalog UX (today the user supplies the GGUF
-  themselves), and a Windows-shaped service-style backend (the current implementation is
+  it. **Model download / catalog UX** is shipped: `/serve download <url-or-hf:owner/repo/path.gguf>
+  [--name <local-name>]` streams a GGUF into `$XDG_CACHE_HOME/freeagent/models/` (resumable
+  pattern via `.part` rename; HF_TOKEN forwarded for gated repos), `/serve models` lists the
+  catalog, and `/serve start <name>` now accepts bare catalog names in addition to absolute paths.
+  **Remaining follow-up**: a Windows-shaped service-style backend (the current implementation is
   Linux-shaped).
 - [ ] **Multimodal — far future.** Image gen / speech-to-text / text-to-speech are *not* a near-term
   goal and stay text/coding-focused for now. When wanted, reach them the same way as LLMs: via a

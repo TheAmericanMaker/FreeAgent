@@ -6,13 +6,13 @@ using FreeAgent.Kernel;
 namespace FreeAgent.Kernel.Tests.Mcp;
 
 /// <summary>
-/// One end-to-end smoke test for the MCP client over an in-memory transport. The individual
-/// scenarios (initialize, tools/list parsing, tools/call argument embedding, JSON-RPC error
-/// surfacing) all pass when run in isolation — but combining them as separate `[Fact]` methods
-/// with `await using` across the xUnit runner hits an interaction with the background read loop's
-/// disposal that hangs the suite. Folding them into one test method works around that without
-/// losing coverage of any path.
+/// End-to-end smoke test for the MCP client over an in-memory transport. Covers initialize,
+/// tools/list parsing, tools/call argument embedding, and JSON-RPC error surfacing in one
+/// `[Fact]`. Lives in <see cref="JsonRpcCollection"/> so it runs sequentially with the LSP smoke
+/// test — running them in parallel hits a race between one client's background read-loop disposal
+/// and the next client's start.
 /// </summary>
+[Collection(JsonRpcCollection.Name)]
 public sealed class McpClientTests
 {
     private sealed class FakeTransport : IMcpTransport
@@ -40,7 +40,7 @@ public sealed class McpClientTests
     private static string ResultEnvelope(int id, string resultJson) =>
         $"{{\"jsonrpc\":\"2.0\",\"id\":{id},\"result\":{resultJson}}}";
 
-    [Fact(Skip = "Hangs the runner when combined with other test classes; passes in isolation. Tracked as a follow-up.")]
+    [Fact]
     public async Task EndToEndProtocolFlow()
     {
         var transport = new FakeTransport();
@@ -81,7 +81,8 @@ public sealed class McpClientTests
         var text = await client.CallToolAsync("greet", "{\"name\":\"Alice\"}", CancellationToken.None);
 
         text.Should().Be("hello world");
-        transport.Written[2].Should().Contain("\"method\":\"tools/call\"")
+        // Written sequence: initialize, notifications/initialized, tools/list, tools/call.
+        transport.Written[3].Should().Contain("\"method\":\"tools/call\"")
             .And.Contain("\"name\":\"greet\"")
             .And.Contain("\"name\":\"Alice\"");
     }

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Net.Sockets;
 
 namespace FreeAgent.Host;
@@ -189,4 +190,185 @@ public static class ModelServerLauncher
 
     /// <summary>Path to the rolling log. Exposed for tests / external introspection.</summary>
     public static string LogPath() => Path.Combine(CacheDir(), "model-server.log");
+
+    /// <summary>Directory where downloaded GGUFs live; exposed so tests can prepare it.</summary>
+    public static string ModelsDir() => Path.Combine(CacheDir(), "models");
+
+    /// <summary>
+    /// Translate a model identifier into the path the launcher should hand to <c>llama-server -m</c>.
+    /// An existing absolute or relative path passes through unchanged. A bare name (with or without
+    /// the <c>.gguf</c> extension) is looked up in <see cref="ModelsDir"/>. If nothing matches the
+    /// input is returned untouched so the caller's "file not found" error surfaces.
+    /// </summary>
+    public static string ResolveModelName(string nameOrPath)
+    {
+        if (string.IsNullOrWhiteSpace(nameOrPath)) return nameOrPath;
+        if (File.Exists(nameOrPath)) return Path.GetFullPath(nameOrPath);
+
+        var direct = Path.Combine(ModelsDir(), nameOrPath);
+        if (File.Exists(direct)) return direct;
+
+        if (!nameOrPath.EndsWith(".gguf", StringComparison.OrdinalIgnoreCase))
+        {
+            var withExt = Path.Combine(ModelsDir(), nameOrPath + ".gguf");
+            if (File.Exists(withExt)) return withExt;
+        }
+        return nameOrPath;
+    }
+
+    /// <summary>
+    /// One-line summary of every <c>.gguf</c> file in <see cref="ModelsDir"/>. Sorted by name for
+    /// determinism. Returns a friendly empty-state message when the dir is missing or empty.
+    /// </summary>
+    public static string ListCatalog()
+    {
+        var dir = ModelsDir();
+        if (!Directory.Exists(dir))
+            return "No models downloaded yet. Try '/serve download hf:owner/repo/path/to/model.gguf'.";
+        var files = Directory.EnumerateFiles(dir, "*.gguf")
+            .OrderBy(f => f, StringComparer.Ordinal)
+            .ToList();
+        if (files.Count == 0)
+            return "No models downloaded yet. Try '/serve download hf:owner/repo/path/to/model.gguf'.";
+        var width = files.Max(f => Path.GetFileName(f).Length);
+        var lines = files.Select(f =>
+        {
+            var name = Path.GetFileName(f).PadRight(width);
+            var size = FormatBytes(new FileInfo(f).Length);
+            return $"  {name}  {size}";
+        });
+        return $"Cached models in {dir}:\n" + string.Join('\n', lines);
+    }
+
+    /// <summary>
+    /// Download a GGUF into <see cref="ModelsDir"/>. <paramref name="source"/> can be a plain HTTPS
+    /// URL or a <c>hf:owner/repo/path/to/file.gguf</c> shorthand for HuggingFace's
+    /// <c>/resolve/main/</c> URL. Streams the body to a <c>.part</c> file and renames on completion
+    /// so an interrupted download leaves no half-file under the model name. <c>HF_TOKEN</c>, if
+    /// set, is forwarded as a Bearer token for gated repositories.
+    /// </summary>
+    public static async Task<string> DownloadAsync(string source, string? overrideName, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(source))
+            return "Usage: /serve download <url-or-hf-spec> [--name <local-name>]";
+
+        Directory.CreateDirectory(ModelsDir());
+        string url;
+        try { url = ResolveSourceToUrl(source); }
+        catch (ArgumentException ex) { return ex.Message; }
+
+        var fileName = !string.IsNullOrWhiteSpace(overrideName)
+            ? overrideName!
+            : InferFileName(url);
+        if (string.IsNullOrWhiteSpace(fileName))
+            return "Couldn't infer a filename from the source — pass --name <local-name>.";
+        if (!fileName.EndsWith(".gguf", StringComparison.OrdinalIgnoreCase))
+            return $"Refusing to download '{fileName}' — only .gguf files are accepted into the model catalog.";
+        if (fileName.Contains('/') || fileName.Contains('\\'))
+            return $"--name '{fileName}' must be a bare filename (no separators).";
+
+        var destination = Path.Combine(ModelsDir(), fileName);
+        if (File.Exists(destination))
+            return $"Already cached: {destination}";
+        var tempPath = destination + ".part";
+
+        using var http = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
+        if (url.Contains("huggingface.co", StringComparison.OrdinalIgnoreCase)
+            && Environment.GetEnvironmentVariable("HF_TOKEN") is { Length: > 0 } token)
+        {
+            http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        }
+
+        try
+        {
+            using var resp = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+            if (!resp.IsSuccessStatusCode)
+            {
+                var snippet = await resp.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                return $"Download failed: HTTP {(int)resp.StatusCode} {resp.StatusCode}. {Truncate(snippet, 200)}";
+            }
+
+            var total = resp.Content.Headers.ContentLength;
+            var buffer = new byte[1 << 16];
+            long copied = 0;
+            var lastReport = 0L;
+            using (var src = await resp.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false))
+            await using (var dst = File.Create(tempPath))
+            {
+                int n;
+                while ((n = await src.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken).ConfigureAwait(false)) > 0)
+                {
+                    await dst.WriteAsync(buffer.AsMemory(0, n), cancellationToken).ConfigureAwait(false);
+                    copied += n;
+                    if (total is { } expected && expected > 0 && copied - lastReport > expected / 20)
+                    {
+                        Console.Error.Write($"\r[freeagent] {fileName}: {100.0 * copied / expected:F0}% ({FormatBytes(copied)}/{FormatBytes(expected)})");
+                        lastReport = copied;
+                    }
+                }
+            }
+            Console.Error.WriteLine();
+
+            File.Move(tempPath, destination);
+            return $"Downloaded: {destination} ({FormatBytes(new FileInfo(destination).Length)})";
+        }
+        catch (OperationCanceledException)
+        {
+            TryCleanupTemp(tempPath);
+            return "Download cancelled.";
+        }
+        catch (Exception ex) when (ex is IOException or HttpRequestException or UriFormatException)
+        {
+            TryCleanupTemp(tempPath);
+            return $"Download failed: {ex.Message}";
+        }
+    }
+
+    /// <summary>
+    /// Turns a source spec into a download URL. <c>hf:owner/repo/file/path.gguf</c> maps to
+    /// <c>https://huggingface.co/owner/repo/resolve/main/file/path.gguf</c>; anything else is
+    /// passed through unchanged (so plain HTTPS URLs Just Work). Exposed for tests.
+    /// </summary>
+    public static string ResolveSourceToUrl(string source)
+    {
+        if (source.StartsWith("hf:", StringComparison.OrdinalIgnoreCase))
+        {
+            var rest = source[3..];
+            var firstSlash = rest.IndexOf('/');
+            var secondSlash = firstSlash >= 0 ? rest.IndexOf('/', firstSlash + 1) : -1;
+            if (firstSlash <= 0 || secondSlash <= firstSlash + 1 || secondSlash >= rest.Length - 1)
+                throw new ArgumentException($"Invalid hf: spec '{source}' — expected hf:owner/repo/path/to/file.gguf");
+            var owner = rest[..firstSlash];
+            var repo = rest[(firstSlash + 1)..secondSlash];
+            var filePath = rest[(secondSlash + 1)..];
+            return $"https://huggingface.co/{owner}/{repo}/resolve/main/{filePath}";
+        }
+        return source;
+    }
+
+    private static string InferFileName(string url)
+    {
+        try
+        {
+            var uri = new Uri(url);
+            return Path.GetFileName(uri.LocalPath);
+        }
+        catch (UriFormatException) { return string.Empty; }
+    }
+
+    private static void TryCleanupTemp(string tempPath)
+    {
+        try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { /* best-effort */ }
+    }
+
+    private static string Truncate(string text, int limit) =>
+        text.Length <= limit ? text : text[..limit] + "…";
+
+    private static string FormatBytes(long bytes) => bytes switch
+    {
+        >= 1L << 30 => $"{bytes / (double)(1L << 30):F1} GB",
+        >= 1L << 20 => $"{bytes / (double)(1L << 20):F1} MB",
+        >= 1L << 10 => $"{bytes / (double)(1L << 10):F1} KB",
+        _ => $"{bytes} B"
+    };
 }

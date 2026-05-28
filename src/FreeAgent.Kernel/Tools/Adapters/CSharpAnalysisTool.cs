@@ -62,7 +62,7 @@ public sealed class CSharpAnalysisTool : ITool
         // Semantic actions need the full compilation; route to that path and return immediately.
         if (action is "find-references" or "find-definition" or "semantic-diagnostics")
         {
-            return await ExecuteSemanticAsync(action, arguments, root, files, cancellationToken);
+            return await ExecuteSemanticAsync(action, arguments, root, files, context.Session.WorkingDirectory, cancellationToken);
         }
 
         var sb = new StringBuilder();
@@ -111,7 +111,7 @@ public sealed class CSharpAnalysisTool : ITool
     }
 
     private static async ValueTask<ToolResult> ExecuteSemanticAsync(
-        string action, JsonDocument arguments, string root, IReadOnlyList<string> files, CancellationToken cancellationToken)
+        string action, JsonDocument arguments, string root, IReadOnlyList<string> files, string workingDirectory, CancellationToken cancellationToken)
     {
         await Task.Yield(); // building a Compilation is CPU work — give other turns a chance to make progress.
 
@@ -119,7 +119,7 @@ public sealed class CSharpAnalysisTool : ITool
         var lines = 0;
         var truncated = false;
 
-        var compilation = RoslynSemanticHelpers.BuildWorkspaceCompilation(files, cancellationToken);
+        var compilation = RoslynSemanticHelpers.BuildWorkspaceCompilation(files, workingDirectory, cancellationToken);
 
         if (action == "semantic-diagnostics")
         {

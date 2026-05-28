@@ -6,13 +6,12 @@ using FreeAgent.Kernel;
 namespace FreeAgent.Kernel.Tests.Lsp;
 
 /// <summary>
-/// Smoke test for <see cref="LspClient"/> over an in-memory transport. As with
-/// <see cref="FreeAgent.Kernel.Tests.Mcp.McpClientTests"/> this is <c>[Skip]</c>'d for the same
-/// reason — running multiple <c>JsonRpcClient</c>-using test classes in one process hits a runner
-/// interaction with the background read loop's disposal that hangs the suite. The protocol code is
-/// covered indirectly by the MCP path (same <c>JsonRpcClient</c>); this file documents the LSP
-/// shape and runs cleanly in isolation.
+/// End-to-end smoke test for <see cref="LspClient"/> over an in-memory transport. Lives in
+/// <see cref="JsonRpcCollection"/> so it runs sequentially with the MCP smoke test — both wrap a
+/// <c>JsonRpcClient</c> with a background read loop, and the runner-parallelism interaction with
+/// disposal of those loops was the original hang.
 /// </summary>
+[Collection(JsonRpcCollection.Name)]
 public sealed class LspClientTests
 {
     private sealed class FakeLspTransport : ILspTransport
@@ -40,7 +39,7 @@ public sealed class LspClientTests
     private static string ResultEnvelope(int id, string resultJson) =>
         $"{{\"jsonrpc\":\"2.0\",\"id\":{id},\"result\":{resultJson}}}";
 
-    [Fact(Skip = "Hangs the runner when combined with other JsonRpcClient-using test classes; passes in isolation. Same root cause as the MCP smoke test.")]
+    [Fact]
     public async Task EndToEndProtocolFlow()
     {
         var transport = new FakeLspTransport();
@@ -71,6 +70,7 @@ public sealed class LspClientTests
             """));
         var refs = await client.ReferencesAsync("file:///a.cs", 3, 7, includeDeclaration: false, CancellationToken.None);
         refs.Should().Equal("file:///c.cs:2:1", "file:///d.cs:5:3");
-        transport.Written[3].Should().Contain("\"includeDeclaration\":false");
+        // Written sequence: initialize, initialized (notification), hover, definition, references.
+        transport.Written[4].Should().Contain("\"includeDeclaration\":false");
     }
 }

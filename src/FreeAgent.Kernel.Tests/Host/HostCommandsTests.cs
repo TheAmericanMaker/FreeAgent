@@ -84,6 +84,33 @@ public sealed class HostCommandsTests
     }
 
     [Fact]
+    public void ServeDownloadParsesUrlAndOptionalName()
+    {
+        var (args, err) = HostCommands.ParseServeDownload(["/serve", "download", "hf:o/r/m.gguf", "--name", "local.gguf"]);
+        err.Should().BeNull();
+        args!.Source.Should().Be("hf:o/r/m.gguf");
+        args.OverrideName.Should().Be("local.gguf");
+    }
+
+    [Fact]
+    public void ServeDownloadParsesBareUrlWithoutName()
+    {
+        var (args, err) = HostCommands.ParseServeDownload(["/serve", "download", "https://example/m.gguf"]);
+        err.Should().BeNull();
+        args!.Source.Should().Be("https://example/m.gguf");
+        args.OverrideName.Should().BeNull();
+    }
+
+    [Fact]
+    public void ServeDownloadRejectsMissingSourceUnknownFlagsAndDoubleSource()
+    {
+        HostCommands.ParseServeDownload(["/serve", "download"]).Error.Should().Contain("Usage");
+        HostCommands.ParseServeDownload(["/serve", "download", "--name"]).Error.Should().Contain("--name");
+        HostCommands.ParseServeDownload(["/serve", "download", "--whatever", "x"]).Error.Should().Contain("Unknown flag");
+        HostCommands.ParseServeDownload(["/serve", "download", "a", "b"]).Error.Should().Contain("Unexpected argument");
+    }
+
+    [Fact]
     public void BuildDefaultRegistryRegistersEverySlashCommand()
     {
         var registry = HostCommands.BuildDefaultRegistry();

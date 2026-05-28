@@ -75,11 +75,16 @@ public static class HostCommands
           /run <name> ...  Run a playbook (.md files in .freeagent/playbooks / ~/.config/freeagent/playbooks).
                            Positional args become {{arg1}}, {{arg2}}, … Bare `/run` lists available.
           /doctor          Print a one-shot configuration + health snapshot.
-          /serve start <model-path> [--port N] [--bin <path>] [-- <extra args>]
+          /serve start <model-path-or-name> [--port N] [--bin <path>] [-- <extra args>]
                            Spawn a local OpenAI-compat inference server (llama-server by default).
                            Prints the OPENAI_BASE_URL line to point FreeAgent at it.
+                           A bare name is resolved against the downloaded-model catalog.
           /serve stop      Kill the running local server (if any).
           /serve status    Show whether the local server is running.
+          /serve download <url-or-hf:owner/repo/path.gguf> [--name <local-name>]
+                           Stream a GGUF into the local catalog. HF_TOKEN is forwarded for gated
+                           HuggingFace repositories.
+          /serve models    List GGUFs currently in the local catalog.
           /fork            Snapshot the current session to session-fork-<id>.jsonl so you can
                            branch the conversation. Resume later with `mv …jsonl session.jsonl
                            && freeagent --resume <id>`.
@@ -258,11 +263,51 @@ public static class HostCommands
         return (new ServeStartArgs(model, port, bin, string.Join(' ', extra)), null);
     }
 
-    /// <summary>Dispatch for <c>/serve {start|stop|status}</c>. Awaits the launcher.</summary>
+    /// <summary>Parsed <c>/serve download</c> arguments. Pure for testability.</summary>
+    public sealed record ServeDownloadArgs(string Source, string? OverrideName);
+
+    /// <summary>
+    /// Parses <c>/serve download &lt;url-or-hf-spec&gt; [--name &lt;local-name&gt;]</c>. The source token
+    /// is required and positional; <c>--name</c> overrides the inferred filename.
+    /// </summary>
+    public static (ServeDownloadArgs? Args, string? Error) ParseServeDownload(string[] parts)
+    {
+        if (parts.Length < 3)
+            return (null, "Usage: /serve download <url-or-hf-spec> [--name <local-name>]");
+
+        string? source = null;
+        string? overrideName = null;
+
+        for (var i = 2; i < parts.Length; i++)
+        {
+            var tok = parts[i];
+            switch (tok)
+            {
+                case "--name" when i + 1 < parts.Length:
+                    overrideName = parts[i + 1]; i++;
+                    break;
+                case "--name":
+                    return (null, "--name needs a filename.");
+                default:
+                    if (tok.StartsWith("--"))
+                        return (null, $"Unknown flag: {tok}");
+                    if (source is not null)
+                        return (null, $"Unexpected argument '{tok}' — source was already '{source}'.");
+                    source = tok;
+                    break;
+            }
+        }
+
+        if (source is null)
+            return (null, "/serve download needs a URL or hf:owner/repo/path/to/file.gguf spec.");
+        return (new ServeDownloadArgs(source, overrideName), null);
+    }
+
+    /// <summary>Dispatch for <c>/serve {start|stop|status|download|models}</c>. Awaits the launcher.</summary>
     public static async Task<string> Serve(string[] parts)
     {
         if (parts.Length < 2)
-            return "Usage: /serve {start|stop|status} …  (see /help)";
+            return "Usage: /serve {start|stop|status|download|models} …  (see /help)";
 
         switch (parts[1].ToLowerInvariant())
         {
@@ -270,15 +315,27 @@ public static class HostCommands
                 {
                     var (args, err) = ParseServeStart(parts);
                     if (args is null) return err ?? "Bad /serve start arguments.";
+                    // Allow short catalog names ("qwen2.5-coder.gguf") in addition to absolute
+                    // paths. ResolveModelName returns the input unchanged if nothing matches, so
+                    // the launcher's missing-file error still surfaces.
+                    var resolved = ModelServerLauncher.ResolveModelName(args.ModelPath);
                     return await ModelServerLauncher.StartAsync(
-                        args.ModelPath, args.Port, args.BinPath, args.ExtraArgs, CancellationToken.None);
+                        resolved, args.Port, args.BinPath, args.ExtraArgs, CancellationToken.None);
                 }
             case "stop":
                 return ModelServerLauncher.Stop();
             case "status":
                 return ModelServerLauncher.Status();
+            case "download":
+                {
+                    var (args, err) = ParseServeDownload(parts);
+                    if (args is null) return err ?? "Bad /serve download arguments.";
+                    return await ModelServerLauncher.DownloadAsync(args.Source, args.OverrideName, CancellationToken.None);
+                }
+            case "models":
+                return ModelServerLauncher.ListCatalog();
             default:
-                return $"Unknown /serve subcommand '{parts[1]}'. Use start, stop, or status.";
+                return $"Unknown /serve subcommand '{parts[1]}'. Use start, stop, status, download, or models.";
         }
     }
 
@@ -303,6 +360,8 @@ public static class HostCommands
         registry.Register(new("serve.start", "Start local model server", "Launch llama-server (or any OpenAI-compat binary) and print the OPENAI_BASE_URL line.", Shortcut: "/serve start …", Category: "Local model"));
         registry.Register(new("serve.stop", "Stop local model server", "Kill the recorded model-server process.", Shortcut: "/serve stop", Category: "Local model"));
         registry.Register(new("serve.status", "Model server status", "Is the local model server running?", Shortcut: "/serve status", Category: "Local model"));
+        registry.Register(new("serve.download", "Download GGUF", "Stream a GGUF into the local catalog (HTTPS URL or hf:owner/repo/path.gguf).", Shortcut: "/serve download …", Category: "Local model"));
+        registry.Register(new("serve.models", "List downloaded models", "Show the GGUFs in the local model catalog.", Shortcut: "/serve models", Category: "Local model"));
         registry.Register(new("run", "Run playbook", "Render a Markdown playbook with positional args and dispatch the user turn.", Shortcut: "/run <name> [args]", Category: "Playbooks"));
         registry.Register(new("commands", "Show command palette", "Fuzzy list of every registered host command (the same registry the TUI palette will use).", Shortcut: "/commands [q]", Category: "Diagnostics"));
         return registry;
