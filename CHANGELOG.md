@@ -19,6 +19,11 @@ All notable changes to FreeAgent are recorded here. The format follows
 
 ### Added — hooks
 
+- **SessionStart hooks** — `HooksConfig.SessionStart` runs once per session (after state creation,
+  before the first turn) with `{{session_id}}` / `{{working_directory}}` substitutions.
+- **`/doctor`** slash command — one-shot diagnostic snapshot: active provider, model, base URL,
+  config path, working dir, tool inventory, sub-agent roles, plan mode, session approvals, undo
+  stack depth.
 - **Pre/post-tool hooks** — fills the pipeline's existing `pre-hook` / `post-hook` seams.
   `HooksConfig` (now part of `.freeagent/config.json` alongside permission rules) declares hooks
   with optional conditions (`tool`, `inputContains`); `HookRunner` matches and dispatches via an

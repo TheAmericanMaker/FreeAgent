@@ -9,7 +9,12 @@ namespace FreeAgent.Host;
 /// </summary>
 public static class HostCommands
 {
-    public static void Handle(string input, SessionState state, string model)
+    /// <summary>Diagnostic context the host snapshots once for <c>/doctor</c>.</summary>
+    public sealed record Diagnostics(
+        string ProviderName, string Model, string BaseUrl, string ConfigPath,
+        IReadOnlyList<string> ToolNames, IReadOnlyList<string> AgentTypes);
+
+    public static void Handle(string input, SessionState state, string model, Diagnostics diagnostics)
     {
         var parts = input.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         switch (parts[0].ToLowerInvariant())
@@ -29,6 +34,9 @@ public static class HostCommands
             case "/undo":
                 Console.WriteLine(Undo(state));
                 break;
+            case "/doctor":
+                Console.WriteLine(DoctorText(state, diagnostics));
+                break;
             default:
                 Console.WriteLine($"Unknown command: {parts[0]}. Try /help.");
                 break;
@@ -43,6 +51,7 @@ public static class HostCommands
           /model           Show the active model and how to change it.
           /plan [on|off]   Toggle plan mode (only read-only tools run).
           /undo            Revert the most recent file change this session.
+          /doctor          Print a one-shot configuration + health snapshot.
           exit | quit      End the session (also Ctrl+D / EOF).
           Ctrl+C           Cancel the current turn without quitting.
         """;
@@ -59,6 +68,22 @@ public static class HostCommands
 
     public static string ModelText(string model) =>
         $"Model: {model}\nChange it with the FREEMODEL env var or \"model\" in ~/.config/freeagent/config.json (restart to apply).";
+
+    /// <summary>One-shot configuration + tool inventory snapshot. No network probes (kept offline-safe).</summary>
+    public static string DoctorText(SessionState state, Diagnostics d) =>
+        $"""
+        FreeAgent diagnostic
+          Provider:   {d.ProviderName}
+          Model:      {d.Model}
+          Base URL:   {d.BaseUrl}
+          Workdir:    {state.WorkingDirectory}
+          User config: {d.ConfigPath}
+          Plan mode:  {(state.PlanMode ? "ON" : "off")}
+          Tools ({d.ToolNames.Count}): {string.Join(", ", d.ToolNames)}
+          Sub-agents ({d.AgentTypes.Count}): {(d.AgentTypes.Count == 0 ? "none" : string.Join(", ", d.AgentTypes))}
+          Session approvals: {(state.SessionApprovals.Count == 0 ? "none" : string.Join(", ", state.SessionApprovals))}
+          File undo stack: {state.History.Count} entr{(state.History.Count == 1 ? "y" : "ies")}
+        """;
 
     /// <summary>
     /// Pops the most recent <see cref="FileSnapshot"/> and restores the file: writes back the

@@ -15,7 +15,8 @@ public sealed record HookSpec(
 /// <summary>Hooks registered for the pipeline's <c>pre-hook</c> / <c>post-hook</c> seams.</summary>
 public sealed record HooksConfig(
     [property: JsonPropertyName("preToolUse")] IReadOnlyList<HookSpec>? PreToolUse = null,
-    [property: JsonPropertyName("postToolUse")] IReadOnlyList<HookSpec>? PostToolUse = null);
+    [property: JsonPropertyName("postToolUse")] IReadOnlyList<HookSpec>? PostToolUse = null,
+    [property: JsonPropertyName("sessionStart")] IReadOnlyList<HookSpec>? SessionStart = null);
 
 /// <summary>Runs configured hooks at the pipeline seams. Errors are non-fatal — the agent never blocks on a hook.</summary>
 public interface IHookRunner
@@ -23,6 +24,9 @@ public interface IHookRunner
     ValueTask RunPreToolAsync(string toolName, string argumentsJson, CancellationToken cancellationToken);
 
     ValueTask RunPostToolAsync(string toolName, string argumentsJson, ToolResult result, CancellationToken cancellationToken);
+
+    /// <summary>Runs configured <c>sessionStart</c> hooks once per session.</summary>
+    ValueTask RunSessionStartAsync(SessionState session, CancellationToken cancellationToken);
 }
 
 /// <summary>Executes a shell command. Host-side seam so the kernel doesn't hardcode bash.</summary>
@@ -44,12 +48,14 @@ public sealed class HookRunner : IHookRunner
 
     private readonly IReadOnlyList<HookSpec> _preTool;
     private readonly IReadOnlyList<HookSpec> _postTool;
+    private readonly IReadOnlyList<HookSpec> _sessionStart;
     private readonly IShellExecutor _shell;
 
     public HookRunner(HooksConfig? config, IShellExecutor shell)
     {
         _preTool = config?.PreToolUse ?? [];
         _postTool = config?.PostToolUse ?? [];
+        _sessionStart = config?.SessionStart ?? [];
         _shell = shell ?? throw new ArgumentNullException(nameof(shell));
     }
 
@@ -58,6 +64,20 @@ public sealed class HookRunner : IHookRunner
 
     public ValueTask RunPostToolAsync(string toolName, string argumentsJson, ToolResult result, CancellationToken cancellationToken) =>
         RunMatchingAsync(_postTool, toolName, argumentsJson, cancellationToken);
+
+    public async ValueTask RunSessionStartAsync(SessionState session, CancellationToken cancellationToken)
+    {
+        if (_sessionStart.Count == 0) return;
+        foreach (var hook in _sessionStart)
+        {
+            if (cancellationToken.IsCancellationRequested) return;
+            var command = hook.Run
+                .Replace("{{session_id}}", session.SessionId, StringComparison.Ordinal)
+                .Replace("{{working_directory}}", session.WorkingDirectory, StringComparison.Ordinal);
+            try { await _shell.RunAsync(command, cancellationToken); }
+            catch { /* non-fatal */ }
+        }
+    }
 
     /// <summary>True if <paramref name="condition"/> (or none) matches the tool call. Pure.</summary>
     public static bool Matches(HookCondition? condition, string toolName, string argumentsJson)

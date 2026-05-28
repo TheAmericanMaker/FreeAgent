@@ -63,12 +63,12 @@ see below.)
   mutating tool invalidates the cache (conservative — full clear). Wired in the host by default.
   Remaining: **artifact store** — offload large tool outputs to disk and return a reference to
   the model (the `artifact-store` seam stays a no-op until then).
-- [x] **Hooks (pre/post-tool)** — done: `HookSpec` / `HookCondition` (tool name + inputContains)
-  + `HooksConfig` in `.freeagent/config.json`; `HookRunner` consults them at the existing
-  `pre-hook` / `post-hook` pipeline seams; `BashShellExecutor` runs `bash -c` with a 30s timeout
-  and streams hook stdout/stderr to the user's console (not the model's transcript). Substitutions:
-  `{{tool_name}}`, `{{tool_input}}` (truncated). Failures are non-fatal. Remaining (later):
-  `SessionStart` hooks (host-side, on new/resumed session).
+- [x] **Hooks (pre/post-tool + SessionStart)** — `HookSpec` / `HookCondition` (tool name +
+  inputContains) + `HooksConfig` (`preToolUse` / `postToolUse` / `sessionStart`) in
+  `.freeagent/config.json`; `HookRunner` consults them at the existing `pre-hook` / `post-hook`
+  pipeline seams and once at session start; `BashShellExecutor` runs `bash -c` with a 30s timeout
+  and streams hook stdout/stderr to the user's console. Substitutions: `{{tool_name}}`,
+  `{{tool_input}}` (truncated), `{{session_id}}`, `{{working_directory}}`. Failures are non-fatal.
 - [x] **Sub-agents** — `AgentDefinition` / `AgentRegistry` + `SubAgentRunner` build an isolated
   sub-session with a filtered tool registry, the role's system-prompt suffix, no-op persistence,
   and silent events; `SpawnAgentTool` exposes it to the model with `AgentSpawnCap` (not auto-allowed

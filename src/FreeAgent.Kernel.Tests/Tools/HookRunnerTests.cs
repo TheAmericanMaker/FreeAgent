@@ -140,6 +140,32 @@ public sealed class HookRunnerTests
     // ── Config loading ──────────────────────────────────────────────────────
 
     [Fact]
+    public async Task SessionStartHooksRunWithSubstitutions()
+    {
+        var shell = new FakeShell();
+        var config = new HooksConfig(SessionStart:
+        [
+            new HookSpec("echo started {{session_id}} in {{working_directory}}"),
+        ]);
+        var runner = new HookRunner(config, shell);
+        var state = new SessionState("abc123", "/work/proj", DateTimeOffset.UnixEpoch);
+
+        await runner.RunSessionStartAsync(state, CancellationToken.None);
+
+        shell.Commands.Should().ContainSingle().Which.Should().Be("echo started abc123 in /work/proj");
+    }
+
+    [Fact]
+    public async Task NoSessionStartHooksMeansNoShellInvocations()
+    {
+        var shell = new FakeShell();
+        var runner = new HookRunner(new HooksConfig(), shell);
+        await runner.RunSessionStartAsync(
+            new SessionState("s", "/w", DateTimeOffset.UnixEpoch), CancellationToken.None);
+        shell.Commands.Should().BeEmpty();
+    }
+
+    [Fact]
     public void HooksParseFromPermissionConfigJson()
     {
         var config = PermissionConfig.Parse("""

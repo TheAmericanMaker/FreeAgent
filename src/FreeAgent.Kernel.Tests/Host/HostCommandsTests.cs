@@ -36,6 +36,30 @@ public sealed class HostCommandsTests
     }
 
     [Fact]
+    public void DoctorReportsProviderToolsAgentsAndState()
+    {
+        var state = State();
+        state.PlanMode = true;
+        state.SessionApprovals.Add("FileWriteCap");
+        var diag = new HostCommands.Diagnostics(
+            ProviderName: "anthropic",
+            Model: "claude-3-7-sonnet-latest",
+            BaseUrl: "https://api.anthropic.com",
+            ConfigPath: "/home/u/.config/freeagent/config.json",
+            ToolNames: ["ReadFile", "WriteFile", "EditFile"],
+            AgentTypes: ["Explore", "Plan"]);
+
+        var doc = HostCommands.DoctorText(state, diag);
+
+        doc.Should().Contain("anthropic").And.Contain("claude-3-7-sonnet-latest");
+        doc.Should().Contain("https://api.anthropic.com").And.Contain("/home/u/.config/freeagent/config.json");
+        doc.Should().Contain("ReadFile, WriteFile, EditFile");
+        doc.Should().Contain("Explore, Plan");
+        doc.Should().Contain("Plan mode:  ON");
+        doc.Should().Contain("FileWriteCap");
+    }
+
+    [Fact]
     public void PlanToggleFlipsAndExplicitOnOffSets()
     {
         var state = State();

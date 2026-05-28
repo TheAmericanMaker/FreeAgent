@@ -46,12 +46,13 @@ public static class Program
         var registry = new ToolRegistry();
         var permissions = new PermissionEngine();
         var projectConfig = LoadProjectConfig(permissions, workingDir);
+        var hookRunner = new HookRunner(projectConfig?.Hooks, new BashShellExecutor());
         var pipeline = new ToolPipeline(
             registry,
             permissions,
             approver: new ConsoleApprover(workingDir),
             cache: new InMemoryToolResultCache(),
-            hooks: new HookRunner(projectConfig?.Hooks, new BashShellExecutor()));
+            hooks: hookRunner);
         var fs = new LinuxAtomicFileSystem();
         var store = new JsonlSessionStore(fs);
         var events = new ConsoleEventSink(options.Verbose);
@@ -98,6 +99,15 @@ public static class Program
             : NewSession(workingDir);
         if (int.TryParse(Environment.GetEnvironmentVariable("FREE_CONTEXT_TOKENS"), out var ctx) && ctx > 0)
             state.ContextWindow = ctx;
+
+        // SessionStart hooks run once per session (after state creation, before the first turn).
+        await hookRunner.RunSessionStartAsync(state, default);
+
+        // Snapshot of host configuration for /doctor.
+        var diagnostics = new HostCommands.Diagnostics(
+            providerName, model, baseUrl, ProviderConfig.ConfigPath(),
+            registry.Definitions.Select(d => d.Name).ToList(),
+            agents.Types.ToList());
         var runtime = new SessionRuntime(provider, registry, pipeline, store, events, state);
 
         // ── launch ─────────────────────────────────────────────────
@@ -133,7 +143,7 @@ public static class Program
 
             if (input.StartsWith('/'))
             {
-                HostCommands.Handle(input, state, model);
+                HostCommands.Handle(input, state, model, diagnostics);
                 continue;
             }
 
