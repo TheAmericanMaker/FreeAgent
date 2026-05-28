@@ -110,14 +110,57 @@ before contacting anything.
 
 ## Configuration
 
-The host is configured through environment variables and a few flags:
+The host is configured through environment variables and a few flags.
 
-| Variable          | Required | Default                       | Purpose                                              |
-| ----------------- | :------: | ----------------------------- | ---------------------------------------------------- |
-| `OPENAI_API_KEY`  |   yes    | —                             | Bearer token sent to the provider.                   |
-| `OPENAI_BASE_URL` |    no    | `https://api.openai.com/v1`   | Endpoint base; `/chat/completions` is appended.      |
-| `FREEMODEL`       |    no    | `gpt-4o-mini`                 | Model name passed in the request body.               |
-| `FREEAGENT_CONFIG`|    no    | `.freeagent/config.json`      | Path to the permission-rules config (see below).     |
+#### Provider selection
+
+| Variable          | Default     | Purpose                                                                                    |
+| ----------------- | ----------- | ------------------------------------------------------------------------------------------ |
+| `FREEPROVIDER`    | `openai`    | Active provider — `openai`, `anthropic`, `azure`, or `ollama`.                            |
+| `FREEMODEL`       | per-provider| Model name (also `OPENAI_MODEL` / `ANTHROPIC_MODEL` / `AZURE_OPENAI_DEPLOYMENT` / `OLLAMA_MODEL`). |
+
+OpenAI / OpenAI-compat:
+
+| Variable          | Required | Default                     | Purpose                                              |
+| ----------------- | :------: | --------------------------- | ---------------------------------------------------- |
+| `OPENAI_API_KEY`  |   yes    | —                           | Bearer token sent to the provider.                   |
+| `OPENAI_BASE_URL` |    no    | `https://api.openai.com/v1` | Endpoint base; `/chat/completions` is appended.      |
+
+Anthropic (`FREEPROVIDER=anthropic`):
+
+| Variable             | Required | Default                      | Purpose                                                            |
+| -------------------- | :------: | ---------------------------- | ------------------------------------------------------------------ |
+| `ANTHROPIC_API_KEY`  |   yes    | —                            | Sent as `x-api-key`.                                              |
+| `ANTHROPIC_BASE_URL` |    no    | `https://api.anthropic.com`  | Endpoint base; `/v1/messages` is appended.                         |
+| `FREE_MAX_TOKENS`    |    no    | `4096`                       | Per-request `max_tokens` ceiling on the visible reply.            |
+| `FREE_THINKING_BUDGET` |   no   | `0` (off)                    | Enables extended thinking with the given token budget for reasoning. |
+
+Azure OpenAI (`FREEPROVIDER=azure`):
+
+| Variable                       | Required | Default               | Purpose                                              |
+| ------------------------------ | :------: | --------------------- | ---------------------------------------------------- |
+| `AZURE_OPENAI_API_KEY`         |   yes    | —                     | Sent as `api-key`.                                  |
+| `AZURE_OPENAI_ENDPOINT`        |   yes    | —                     | e.g. `https://my-resource.openai.azure.com`.        |
+| `AZURE_OPENAI_DEPLOYMENT`      |   yes    | —                     | Deployment name (used in place of model).           |
+| `AZURE_OPENAI_API_VERSION`     |    no    | `2024-08-01-preview`  | Azure API version.                                  |
+
+Ollama (`FREEPROVIDER=ollama`, no API key needed):
+
+| Variable          | Default                  | Purpose                                              |
+| ----------------- | ------------------------ | ---------------------------------------------------- |
+| `OLLAMA_HOST`     | `http://localhost:11434` | Endpoint base.                                       |
+| `OLLAMA_MODEL`    | `qwen2.5-coder`          | Model name.                                          |
+| `FREE_NUM_CTX`    | (off)                    | Per-request `num_ctx` in Ollama options.            |
+| `FREE_TEMPERATURE`| (off)                    | Per-request `temperature` in Ollama options.        |
+
+#### Other host knobs
+
+| Variable                  | Purpose                                                                              |
+| ------------------------- | ------------------------------------------------------------------------------------ |
+| `FREEAGENT_CONFIG`        | Path to the permission-rules config (defaults to `.freeagent/config.json`).         |
+| `FREE_CONTEXT_TOKENS`     | Override the model's context window for the pre-turn compactor.                     |
+| `FREE_SESSION_ITERATIONS` | Cap iterations across a whole session (in addition to the per-turn `MaxIterations`).|
+| `FREE_WATCH_FILES=1`      | Enable the workspace file watcher (off by default; inotify can be heavy on big repos).|
 
 | Flag              | Purpose                                                          |
 | ----------------- | --------------------------------------------------------------- |
@@ -127,7 +170,8 @@ The host is configured through environment variables and a few flags:
 | `--resume [id]`   | Resume the session in `session.jsonl` (optionally requiring its id). |
 
 At the prompt, slash commands handle host-side concerns (not sent to the model):
-`/help`, `/status`, `/model`, `/plan [on|off]` (plan mode), `/undo` (revert the most recent file change).
+`/help`, `/status`, `/model`, `/plan [on|off]`, `/undo`, `/revert [N]`, `/tag <n>`, `/untag <n>`,
+`/run <playbook>`, `/doctor`, `/serve {start|stop|status}`, `/fork`.
 
 ### Provider settings without env vars
 
@@ -397,6 +441,17 @@ cache invalidation. The permission engine already models capabilities
 exercises yet — networked tools, VCS tooling, sub-agents, and memory are the
 natural next adapters.
 
-Deliberately **out of scope for now:** a full-screen TUI, MCP/LSP integration,
-background process management, sub-agents, playbooks, a Docker wrapper, Roslyn-based
-tooling, and a broad multi-provider matrix beyond the OpenAI-compatible shape.
+**Now shipped (since the original "out of scope" list above was written):**
+sub-agents, playbooks, MCP client (integration test currently `[Skip]`'d due to a
+runner interaction with background-loop disposal), native Anthropic + native
+Azure OpenAI + native Ollama providers, Roslyn-based syntactic analysis
+(`CSharpAnalysis` tool), local model server lifecycle (`/serve`), opt-in
+workspace file watching, session forking (`/fork`), and Anthropic extended
+thinking (`FREE_THINKING_BUDGET`).
+
+Still **deliberately deferred:** a full-screen TUI (planned as a Bun/opentui
+client over the headless-core protocol — see ADR 0005), LSP integration,
+AWS Bedrock / Google Vertex providers (provider-specific auth), the
+HTTP+SSE protocol server, multimodal generation, and Roslyn *semantic*
+analysis (find-references, callers, blast-radius — requires a full
+`Compilation` with metadata references).
