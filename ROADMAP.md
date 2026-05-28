@@ -63,8 +63,12 @@ see below.)
   mutating tool invalidates the cache (conservative — full clear). Wired in the host by default.
   Remaining: **artifact store** — offload large tool outputs to disk and return a reference to
   the model (the `artifact-store` seam stays a no-op until then).
-- [ ] **Hooks** — `SessionStart` / `PreToolUse` / `PostToolUse` scripts at the existing
-  `pre-hook` / `post-hook` seams, with tool-name / input-substring conditions.
+- [x] **Hooks (pre/post-tool)** — done: `HookSpec` / `HookCondition` (tool name + inputContains)
+  + `HooksConfig` in `.freeagent/config.json`; `HookRunner` consults them at the existing
+  `pre-hook` / `post-hook` pipeline seams; `BashShellExecutor` runs `bash -c` with a 30s timeout
+  and streams hook stdout/stderr to the user's console (not the model's transcript). Substitutions:
+  `{{tool_name}}`, `{{tool_input}}` (truncated). Failures are non-fatal. Remaining (later):
+  `SessionStart` hooks (host-side, on new/resumed session).
 - [ ] **Sub-agents** — spawn isolated sessions with restricted tool sets
   (`AgentSpawnCap` is already modeled); start with `Explore` / `Plan` / `Coder` /
   `Verify` roles.
@@ -183,3 +187,4 @@ from the current per-turn `MaxIterations`) would be a separate counter if ever a
 - [x] File history + `/undo` — per-write snapshots in `SessionState.History`, restored or deleted by `HostCommands.Undo`
 - [x] Cross-session memory — `ReadMemoryTool` / `WriteMemoryTool` (filesystem-backed, XDG-aware)
 - [x] System-prompt assembly — base + working dir + git branch (from `.git/HEAD`) + project context file (`CLAUDE.md` / `AGENTS.md` / `FREEAGENT.md`)
+- [x] Pre/post-tool hooks — `HooksConfig` in `.freeagent/config.json`, `HookRunner` at the pre-hook / post-hook seams, `BashShellExecutor` host-side

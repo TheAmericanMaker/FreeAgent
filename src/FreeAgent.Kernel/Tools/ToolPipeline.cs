@@ -16,6 +16,7 @@ public sealed class ToolPipeline
     private readonly IPermissionEngine _permissions;
     private readonly IPermissionApprover? _approver;
     private readonly IToolResultCache? _cache;
+    private readonly IHookRunner? _hooks;
     private readonly object _stepLogGate = new();
 
     /// <summary>Ordered record of the conceptual steps reached during the last call(s).</summary>
@@ -31,16 +32,19 @@ public sealed class ToolPipeline
     /// successful results are stored, and a successful mutating tool invalidates the cache. With no
     /// cache, the pipeline behaves as before.
     /// </param>
+    /// <param name="hooks">Optional pre/post-tool hook runner. With no runner, the hook seams stay no-ops.</param>
     public ToolPipeline(
         IToolRegistry registry,
         IPermissionEngine permissions,
         IPermissionApprover? approver = null,
-        IToolResultCache? cache = null)
+        IToolResultCache? cache = null,
+        IHookRunner? hooks = null)
     {
         _registry = registry;
         _permissions = permissions;
         _approver = approver;
         _cache = cache;
+        _hooks = hooks;
     }
 
     public async ValueTask<ToolResult> ExecuteAsync(ToolCall call, SessionState state, CancellationToken cancellationToken)
@@ -119,8 +123,10 @@ public sealed class ToolPipeline
                 }
             }
 
-            // Step 7 — pre-hook. Future seam; non-fatal.
+            // Step 7 — pre-hook. Runs configured pre-tool hooks (non-fatal; errors swallowed by the runner).
             AddStep("pre-hook");
+            if (_hooks is not null)
+                await _hooks.RunPreToolAsync(call.Name, call.ArgumentsJson, cancellationToken);
 
             // Step 8 — execute. Cancellation and crashes are mapped to result classes here;
             // an exception never escapes the pipeline.
@@ -147,8 +153,10 @@ public sealed class ToolPipeline
                 result = ToolResult.Empty($"Tool '{call.Name}' completed but produced no output.");
             }
 
-            // Step 9 — post-hook. Future seam; non-fatal, result not modified.
+            // Step 9 — post-hook. Runs configured post-tool hooks; result is not modified by hooks.
             AddStep("post-hook");
+            if (_hooks is not null)
+                await _hooks.RunPostToolAsync(call.Name, call.ArgumentsJson, result, cancellationToken);
 
             // Step 10 — artifact-store (large Success previews). Future seam.
             AddStep("artifact-store");

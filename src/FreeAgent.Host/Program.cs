@@ -45,12 +45,13 @@ public static class Program
         };
         var registry = new ToolRegistry();
         var permissions = new PermissionEngine();
-        LoadPermissionConfig(permissions, workingDir);
+        var projectConfig = LoadProjectConfig(permissions, workingDir);
         var pipeline = new ToolPipeline(
             registry,
             permissions,
             approver: new ConsoleApprover(workingDir),
-            cache: new InMemoryToolResultCache());
+            cache: new InMemoryToolResultCache(),
+            hooks: new HookRunner(projectConfig?.Hooks, new BashShellExecutor()));
         var fs = new LinuxAtomicFileSystem();
         var store = new JsonlSessionStore(fs);
         var events = new ConsoleEventSink(options.Verbose);
@@ -228,28 +229,30 @@ public static class Program
     }
 
     /// <summary>
-    /// Loads permission allow/deny rules from <c>$FREEAGENT_CONFIG</c> (or <c>.freeagent/config.json</c>
-    /// in the working directory) and applies them to the engine. A missing file is fine; a malformed
-    /// one is a non-fatal warning so a bad config never blocks startup.
+    /// Loads <c>.freeagent/config.json</c> (or <c>$FREEAGENT_CONFIG</c>): applies permission rules
+    /// to the engine and returns the parsed config so the host can also wire its hooks. A missing
+    /// file returns null; a malformed one is a non-fatal warning that never blocks startup.
     /// </summary>
-    private static void LoadPermissionConfig(PermissionEngine permissions, string workingDir)
+    private static PermissionConfig? LoadProjectConfig(PermissionEngine permissions, string workingDir)
     {
         var path = Environment.GetEnvironmentVariable("FREEAGENT_CONFIG");
         if (string.IsNullOrWhiteSpace(path))
             path = Path.Combine(workingDir, ".freeagent", "config.json");
 
         if (!File.Exists(path))
-            return;
+            return null;
 
         try
         {
             var config = PermissionConfig.Parse(File.ReadAllText(path));
             config.ApplyTo(permissions);
             Console.WriteLine($"Loaded {config.RuleCount} permission rule(s) from {path}");
+            return config;
         }
         catch (Exception ex) when (ex is JsonException or ArgumentException or IOException or UnauthorizedAccessException)
         {
-            Console.Error.WriteLine($"Warning: ignoring permission config '{path}': {ex.Message}");
+            Console.Error.WriteLine($"Warning: ignoring config '{path}': {ex.Message}");
+            return null;
         }
     }
 

@@ -31,6 +31,9 @@ public sealed class PermissionConfig
     [JsonPropertyName("allow")] public IReadOnlyList<CapabilityRuleConfig>? Allow { get; init; }
     [JsonPropertyName("deny")] public IReadOnlyList<CapabilityRuleConfig>? Deny { get; init; }
 
+    /// <summary>Optional pre-tool / post-tool hooks (the class is also the umbrella for project-level config beyond permissions).</summary>
+    [JsonPropertyName("hooks")] public HooksConfig? Hooks { get; init; }
+
     public sealed record CapabilityRuleConfig(string Capability, string? Pattern = null);
 
     /// <summary>Parses and validates a config document. Throws <see cref="JsonException"/> on malformed

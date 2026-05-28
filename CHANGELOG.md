@@ -6,6 +6,15 @@ All notable changes to FreeAgent are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added — hooks
+
+- **Pre/post-tool hooks** — fills the pipeline's existing `pre-hook` / `post-hook` seams.
+  `HooksConfig` (now part of `.freeagent/config.json` alongside permission rules) declares hooks
+  with optional conditions (`tool`, `inputContains`); `HookRunner` matches and dispatches via an
+  `IShellExecutor` seam. Host's `BashShellExecutor` runs `bash -c` with a 30s timeout and streams
+  hook output to the user's console (not the model's transcript). Substitutions: `{{tool_name}}`,
+  `{{tool_input}}`. Hook errors are non-fatal — they never block the agent.
+
 ### Added — grounding
 
 - **System-prompt assembly** — the system prompt now layers (in order): base text (default or
