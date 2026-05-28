@@ -6,6 +6,14 @@ All notable changes to FreeAgent are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added — session forking
+
+- **`/fork`** — snapshots the current transcript to `session-fork-<id>.jsonl` alongside the live
+  `session.jsonl`. The clone gets a fresh 8-character id and is persisted via a dedicated
+  `JsonlSessionStore` so the running session is never touched. Resume the fork later by moving
+  it back: `mv session-fork-<id>.jsonl session.jsonl && freeagent --resume <id>`. Empty sessions
+  (no messages yet) refuse to fork.
+
 ### Added — workspace file watching
 
 - **`WorkspaceFileWatcher`** — opt-in (`FREE_WATCH_FILES=1`) watcher that surfaces externally

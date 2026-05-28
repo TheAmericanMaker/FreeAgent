@@ -84,6 +84,55 @@ public sealed class HostCommandsTests
     }
 
     [Fact]
+    public async Task ForkOnEmptySessionRefuses()
+    {
+        var state = State();
+        var result = await HostCommands.Fork(state);
+        result.Should().Contain("Nothing to fork");
+    }
+
+    [Fact]
+    public async Task ForkSnapshotsTranscriptToSeparateFileWithNewId()
+    {
+        // Use a temp directory so the test doesn't leave a session-fork-*.jsonl alongside the repo.
+        var tempDir = Directory.CreateDirectory(
+            Path.Combine(Path.GetTempPath(), "freeagent-fork-tests", Guid.NewGuid().ToString("N"))).FullName;
+        try
+        {
+            var state = new SessionState("orig1234", tempDir, DateTimeOffset.UnixEpoch);
+            state.Messages.Add(new Message(MessageRole.System, "sys"));
+            state.Messages.Add(new Message(MessageRole.User, "hi"));
+            state.Messages.Add(new Message(MessageRole.Assistant, "hello"));
+
+            var result = await HostCommands.Fork(state);
+            result.Should().Contain("Forked").And.Contain("3 message").And.Contain("--resume");
+
+            var forkFiles = Directory.GetFiles(tempDir, "session-fork-*.jsonl");
+            forkFiles.Should().ContainSingle();
+
+            var forkPath = forkFiles[0];
+            var loadStore = new JsonlSessionStore(path: forkPath);
+            var jsonl = await File.ReadAllTextAsync(forkPath);
+            var loaded = await loadStore.DeserializeAsync(jsonl, default);
+
+            loaded.SessionId.Should().NotBe("orig1234");
+            loaded.SessionId.Should().HaveLength(8);
+            loaded.WorkingDirectory.Should().Be(tempDir);
+            loaded.Messages.Should().HaveCount(3);
+            loaded.Messages.Select(m => m.Content).Should().Equal("sys", "hi", "hello");
+
+            // Original state is untouched (no rename, no message mutation).
+            state.SessionId.Should().Be("orig1234");
+            state.Messages.Should().HaveCount(3);
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, recursive: true); }
+            catch (IOException) { }
+        }
+    }
+
+    [Fact]
     public void StatusReportsSessionModelDirAndCounts()
     {
         var state = State();

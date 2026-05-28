@@ -49,6 +49,9 @@ public static class HostCommands
             case "/serve":
                 Console.WriteLine(Serve(parts).GetAwaiter().GetResult());
                 break;
+            case "/fork":
+                Console.WriteLine(Fork(state).GetAwaiter().GetResult());
+                break;
             default:
                 Console.WriteLine($"Unknown command: {parts[0]}. Try /help.");
                 break;
@@ -74,6 +77,9 @@ public static class HostCommands
                            Prints the OPENAI_BASE_URL line to point FreeAgent at it.
           /serve stop      Kill the running local server (if any).
           /serve status    Show whether the local server is running.
+          /fork            Snapshot the current session to session-fork-<id>.jsonl so you can
+                           branch the conversation. Resume later with `mv …jsonl session.jsonl
+                           && freeagent --resume <id>`.
           exit | quit      End the session (also Ctrl+D / EOF).
           Ctrl+C           Cancel the current turn without quitting.
         """;
@@ -269,6 +275,35 @@ public static class HostCommands
             default:
                 return $"Unknown /serve subcommand '{parts[1]}'. Use start, stop, or status.";
         }
+    }
+
+    /// <summary>
+    /// Snapshots the current transcript to a forked session file alongside the live one. The clone
+    /// gets a fresh 8-character id and is persisted via a separate <see cref="JsonlSessionStore"/>
+    /// so the live session is never touched; the user can later promote the fork by moving it back
+    /// to <c>session.jsonl</c> and passing the fork id to <c>--resume</c>. Empty sessions are
+    /// rejected (nothing to clone).
+    /// </summary>
+    public static async Task<string> Fork(SessionState state)
+    {
+        if (state.Messages.Count == 0)
+            return "Nothing to fork yet (no messages in the session).";
+
+        var newId = Guid.NewGuid().ToString("N")[..8];
+        var forked = new SessionState(newId, state.WorkingDirectory, DateTimeOffset.UtcNow);
+        foreach (var m in state.Messages)
+            forked.Messages.Add(m);
+
+        var forkPath = Path.Combine(state.WorkingDirectory, $"session-fork-{newId}.jsonl");
+        var store = new JsonlSessionStore(path: forkPath);
+        try { await store.SaveAsync(forked, CancellationToken.None); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            return $"Fork failed: {ex.Message}";
+        }
+
+        return $"Forked: {forked.Messages.Count} message(s) snapshot to {forkPath}.\n"
+             + $"Resume later: mv {Path.GetFileName(forkPath)} session.jsonl && freeagent --resume {newId}";
     }
 
     /// <summary>Applies <c>/plan</c> (toggle, or <c>on</c>/<c>off</c>), mutating the session and returning the status line.</summary>

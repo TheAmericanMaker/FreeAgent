@@ -177,8 +177,11 @@ Phasing (the kernel is *already* effectively headless — `SessionRuntime` + `IE
   `ToolPipeline.ActivitySource`; attach any `ActivityListener` / OTel SDK to consume), and
   **file watching** (`WorkspaceFileWatcher`, opt-in via `FREE_WATCH_FILES=1`; surfaces externally
   changed files as a notice prepended to the next user turn — deduped, sorted, noise-dir filtered,
-  capped to 10 visible with overflow summary) done. Remaining: **session forking** (clone state
-  to a new id), **extended-thinking + token-budget controls**.
+  capped to 10 visible with overflow summary), and **session forking** (`/fork` snapshots the
+  current transcript to `session-fork-<id>.jsonl` alongside the live file with a fresh 8-char id,
+  via a dedicated `JsonlSessionStore`; the live session is untouched and the fork is promoted by
+  `mv …jsonl session.jsonl && freeagent --resume <id>`) done. Remaining:
+  **extended-thinking + token-budget controls**.
 
 ## Deliberately deferred
 
