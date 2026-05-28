@@ -8,6 +8,10 @@ All notable changes to FreeAgent are recorded here. The format follows
 
 ### Added — agent UX
 
+- **System prompt (user-editable)** — new sessions now start with a grounding system message
+  (agent identity, tool-first behavior, "denied is final — don't invent an approval dialog", be
+  concise) + the working directory. Overridable via `.freeagent/system.md` (project) or
+  `~/.config/freeagent/system.md` (user); previously no system prompt was sent at all.
 - **Interactive permission approval** — the engine now distinguishes a hard deny from an
   approvable `Prompt` (uncovered capability); the pipeline consults an optional `IPermissionApprover`
   on `Prompt`, with "allow for session" grants tracked in `SessionState.SessionApprovals`. The host's

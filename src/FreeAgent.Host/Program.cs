@@ -168,8 +168,12 @@ public static class Program
             """);
     }
 
-    private static SessionState NewSession(string workingDir) =>
-        new(Guid.NewGuid().ToString()[..8], workingDir, DateTimeOffset.UtcNow);
+    private static SessionState NewSession(string workingDir)
+    {
+        var state = new SessionState(Guid.NewGuid().ToString()[..8], workingDir, DateTimeOffset.UtcNow);
+        state.Messages.Add(new Message(MessageRole.System, SystemPrompt.Compose(workingDir)));
+        return state;
+    }
 
     /// <summary>
     /// Resumes the session persisted at <c>{workingDir}/session.jsonl</c>, optionally requiring its id
