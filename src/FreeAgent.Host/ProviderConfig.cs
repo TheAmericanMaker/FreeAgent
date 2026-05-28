@@ -2,8 +2,8 @@ using System.Text.Json;
 
 namespace FreeAgent.Host;
 
-/// <summary>Per-provider connection settings.</summary>
-public sealed record ProviderSettings(string? BaseUrl, string? ApiKey, string? Model);
+/// <summary>Per-provider connection settings. <see cref="ApiVersion"/> is currently Azure-only.</summary>
+public sealed record ProviderSettings(string? BaseUrl, string? ApiKey, string? Model, string? ApiVersion = null);
 
 /// <summary>
 /// User-level config so the bare <c>freeagent</c> command works without exporting env vars in every
@@ -44,6 +44,9 @@ public sealed class ProviderConfig
     /// <summary>Optional explicit Anthropic section.</summary>
     public ProviderSettings? Anthropic { get; init; }
 
+    /// <summary>Optional explicit Azure OpenAI section. <c>Model</c> here is the deployment name.</summary>
+    public ProviderSettings? Azure { get; init; }
+
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web)
     {
         ReadCommentHandling = JsonCommentHandling.Skip,
@@ -68,6 +71,20 @@ public sealed class ProviderConfig
                 Model:   Resolve(
                     Environment.GetEnvironmentVariable("FREEMODEL") ?? Environment.GetEnvironmentVariable("ANTHROPIC_MODEL"),
                     Anthropic?.Model, AnthropicDefaultModel));
+        }
+
+        if (string.Equals(provider, "azure", StringComparison.OrdinalIgnoreCase))
+        {
+            return new ProviderSettings(
+                BaseUrl: Resolve(Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT"), Azure?.BaseUrl, string.Empty),
+                ApiKey:  Resolve(Environment.GetEnvironmentVariable("AZURE_OPENAI_API_KEY"),  Azure?.ApiKey,  string.Empty),
+                // For Azure the "model" field is the deployment name.
+                Model: Resolve(
+                    Environment.GetEnvironmentVariable("FREEMODEL") ?? Environment.GetEnvironmentVariable("AZURE_OPENAI_DEPLOYMENT"),
+                    Azure?.Model, string.Empty),
+                ApiVersion: Resolve(
+                    Environment.GetEnvironmentVariable("AZURE_OPENAI_API_VERSION"), Azure?.ApiVersion,
+                    "2024-08-01-preview"));
         }
 
         return new ProviderSettings(

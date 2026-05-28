@@ -31,7 +31,12 @@ public static class Program
         // ── bootstrap ──────────────────────────────────────────────
         if (string.IsNullOrWhiteSpace(apiKey))
         {
-            var keyEnv = providerName == "anthropic" ? "ANTHROPIC_API_KEY" : "OPENAI_API_KEY";
+            var keyEnv = providerName switch
+            {
+                "anthropic" => "ANTHROPIC_API_KEY",
+                "azure" => "AZURE_OPENAI_API_KEY",
+                _ => "OPENAI_API_KEY",
+            };
             Console.Error.WriteLine($"Error: no API key found for provider '{providerName}'.");
             Console.Error.WriteLine($"Set {keyEnv}, or add the key to {ProviderConfig.ConfigPath()}.");
             Environment.Exit(1);
@@ -41,6 +46,9 @@ public static class Program
         IProvider provider = providerName switch
         {
             "anthropic" => new AnthropicProvider(baseUrl, apiKey, model),
+            "azure" => new AzureOpenAIProvider(
+                endpoint: baseUrl, apiKey: apiKey, deployment: model,
+                apiVersion: settings.ApiVersion ?? AzureOpenAIProvider.DefaultApiVersion),
             _ => new OpenAIProvider(baseUrl, apiKey, model),
         };
         var registry = new ToolRegistry();

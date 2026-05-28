@@ -43,14 +43,15 @@ see below.)
 
 ## Coming next — larger features
 
-- [ ] **More providers + provider-model scaffolding** — *Anthropic done (see Done).* Remaining:
-  additional providers (Azure OpenAI, Bedrock, Vertex, Groq) behind the existing seam, plus the
-  scaffolding the single `StreamChatAsync` seam still lacks (pi-mono pattern): a first-class
-  **`Model` metadata record** (id / wire-API / baseUrl / context window / max tokens / cost /
-  reasoning) on `ProviderRequest`; **per-model compat flags** to absorb OpenAI-compatible variants
-  without forking the adapter; typed **request options** + a provider-agnostic **`StopReason`**;
-  and a formal provider **registry keyed by wire-API** (`openai-completions`, `anthropic-messages`,
-  …) rather than by vendor, with a separate model registry.
+- [ ] **More providers + provider-model scaffolding** — *Anthropic, Azure OpenAI done (see
+  Done).* Remaining: Bedrock, Vertex, Groq (Groq is pure OpenAI-compat — just set
+  `OPENAI_BASE_URL=https://api.groq.com/openai/v1`); plus the scaffolding the single
+  `StreamChatAsync` seam still lacks (pi-mono pattern): a first-class **`Model` metadata
+  record** (id / wire-API / baseUrl / context window / max tokens / cost / reasoning) on
+  `ProviderRequest`; **per-model compat flags** to absorb OpenAI-compatible variants without
+  forking the adapter; typed **request options** + a provider-agnostic **`StopReason`**; and a
+  formal provider **registry keyed by wire-API** rather than by vendor, with a separate model
+  registry.
 - [x] **Context-window management** — per-turn input-token tracking in `SessionState`, configurable
   `ContextWindow` (env `FREE_CONTEXT_TOKENS`), and pre-turn **turn-aware compaction** that drops
   older `User → Assistant → Tool` blocks (preserving `tool_use` / `tool_result` pairings and the
