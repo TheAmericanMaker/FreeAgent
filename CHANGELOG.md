@@ -6,6 +6,19 @@ All notable changes to FreeAgent are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added — C# analysis
+
+- **`CSharpAnalysis` tool** — Roslyn-backed syntactic analysis of `.cs` files in the workspace.
+  Three actions: `list-types` (every class / interface / struct / record / record struct / enum /
+  delegate declaration, qualified by enclosing namespaces + types), `list-members` (methods,
+  ctors, properties, fields, events, indexers per type with parameter-type signatures), and
+  `diagnostics` (syntax-level parse errors only). Read-only, concurrency-safe; required capability
+  is a `FileReadCap` on the resolved root. Optional `glob` filter and a 500-line output cap keep
+  results bounded. Registered in the host and added to the `Explore` / `Plan` sub-agent
+  whitelists. Pulls in `Microsoft.CodeAnalysis.CSharp` 5.3 (parse-only — no `Compilation` or
+  metadata references). Semantic features (find-references / callers / blast-radius) remain a
+  follow-up.
+
 ### Added — sub-agents
 
 - **Sub-agents** — `AgentDefinition` / `AgentRegistry` + `SubAgentRunner` build an isolated

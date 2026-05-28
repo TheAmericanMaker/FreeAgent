@@ -76,6 +76,7 @@ public static class Program
         registry.Register(new ProcessExecTool());
         registry.Register(new GlobTool());
         registry.Register(new GrepTool());
+        registry.Register(new CSharpAnalysisTool());
         registry.Register(new EnterPlanModeTool());
         registry.Register(new ExitPlanModeTool());
         registry.Register(new ReadMemoryTool());
@@ -91,11 +92,11 @@ public static class Program
         var agents = new AgentRegistry();
         agents.Register(new AgentDefinition(
             "Explore",
-            ["ReadFile", "Glob", "Grep", "ReadMemory"],
+            ["ReadFile", "Glob", "Grep", "CSharpAnalysis", "ReadMemory"],
             "You are an Explore sub-agent. You may only read and search the workspace; report what you find concisely."));
         agents.Register(new AgentDefinition(
             "Plan",
-            ["ReadFile", "Glob", "Grep", "ReadMemory", "EnterPlanMode", "ExitPlanMode"],
+            ["ReadFile", "Glob", "Grep", "CSharpAnalysis", "ReadMemory", "EnterPlanMode", "ExitPlanMode"],
             "You are a Plan sub-agent. Investigate the task and produce a step-by-step plan. Do not make changes."));
         agents.Register(new AgentDefinition(
             "Coder",

@@ -125,8 +125,15 @@ Phasing (the kernel is *already* effectively headless — `SessionRuntime` + `IE
   across test classes; passes in isolation. End-to-end with real MCP servers untested.
 - [ ] **LSP client** — language-server-backed `hover` / `definition` / `references` /
   `diagnostics`.
-- [ ] **Roslyn tool** — C# semantic analysis (overview, find-references, callers,
-  blast-radius), relevant since FreeAgent itself is C#.
+- [x] **Roslyn tool (syntactic)** — `CSharpAnalysisTool` parses `.cs` files with
+  `CSharpSyntaxTree` (no semantic model / metadata references, so the dependency stays parse-only)
+  and exposes three actions: `list-types` (one line per class/interface/struct/record/enum/delegate
+  declaration, qualified by enclosing namespace + types), `list-members` (per-type methods, ctors,
+  properties, fields, events, indexers, with parameter-type signatures), and `diagnostics` (syntax
+  parse errors only). Read-only and concurrency-safe; required cap is a `FileReadCap` on the resolved
+  path. Wired into the host registry and the `Explore`/`Plan` sub-agent whitelists. Output capped at
+  500 lines. *Semantic actions (find-references, callers, blast-radius) remain a follow-up — they
+  require a full `Compilation` with metadata references, which is a heavier integration.*
 - [ ] **TUI (protocol client, opencode-style)** — per ADR 0005, the full-screen TUI is a
   **frontend client over the protocol**, not embedded in the host: a Bun/SolidJS app using
   **opentui** (the stack opencode uses) attached to the headless core. opentui is Zig + C-ABI +
