@@ -57,9 +57,12 @@ see below.)
   pairings and the user-first alternation), prepending a notice to the first kept user message.
   Remaining/next: **LLM-based summarization** of the dropped turns (replace the notice with a
   real summary).
-- [ ] **Result cache + artifact store** — fill the `cache-lookup` / `cache-write` /
-  `invalidate` and `artifact-store` pipeline seams (offload large tool outputs and
-  return a reference to the model).
+- [x] **Result cache (cache-lookup / cache-write / invalidate seams filled)** — done:
+  `IToolResultCache` + `InMemoryToolResultCache`; the pipeline serves read-only `Success`
+  results from cache, skips `execute` on a hit, never caches errors/`Empty`, and a successful
+  mutating tool invalidates the cache (conservative — full clear). Wired in the host by default.
+  Remaining: **artifact store** — offload large tool outputs to disk and return a reference to
+  the model (the `artifact-store` seam stays a no-op until then).
 - [ ] **Hooks** — `SessionStart` / `PreToolUse` / `PostToolUse` scripts at the existing
   `pre-hook` / `post-hook` seams, with tool-name / input-substring conditions.
 - [ ] **Sub-agents** — spawn isolated sessions with restricted tool sets
@@ -169,3 +172,4 @@ from the current per-turn `MaxIterations`) would be a separate counter if ever a
 - [x] Native Anthropic Messages-API streaming provider (text / thinking / tool-use, cache-aware normalized `Usage`) + `FREEPROVIDER` selection with per-provider config sections
 - [x] Context-window safety net — token tracking + pre-turn turn-aware compaction (no LLM summary yet)
 - [x] `EditFile` tool — safe in-place string-replace editing (unique-match by default)
+- [x] Result cache — read-only `Success` cached, mutating tools invalidate (`cache-lookup` / `cache-write` / `invalidate` seams filled)

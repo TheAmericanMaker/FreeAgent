@@ -15,6 +15,11 @@ All notable changes to FreeAgent are recorded here. The format follows
 
 ### Added — robustness
 
+- **Result cache** — fills the pipeline's `cache-lookup` / `cache-write` / `invalidate` seams.
+  Read-only tool `Success` results are cached by `(toolName, canonicalised-arguments)`; a hit
+  short-circuits before `execute`; a successful mutating tool drops every cached entry (conservative
+  invalidation). `IToolResultCache` / `InMemoryToolResultCache` are public seams; the host wires the
+  in-memory cache by default.
 - **Context-window compaction** — `SessionState` tracks `LastInputTokens` (from `Usage`) and a
   configurable `ContextWindow` (env `FREE_CONTEXT_TOKENS`); when the previous turn pushed input
   tokens past 80% of the window, `SessionRuntime` calls `Compactor.Compact` before the next turn —

@@ -15,6 +15,7 @@ public sealed class ToolPipeline
     private readonly IToolRegistry _registry;
     private readonly IPermissionEngine _permissions;
     private readonly IPermissionApprover? _approver;
+    private readonly IToolResultCache? _cache;
     private readonly object _stepLogGate = new();
 
     /// <summary>Ordered record of the conceptual steps reached during the last call(s).</summary>
@@ -25,11 +26,21 @@ public sealed class ToolPipeline
     /// <see cref="PermissionOutcome.Prompt"/>. When null, a prompt is treated as a denial — the
     /// deterministic, non-interactive default.
     /// </param>
-    public ToolPipeline(IToolRegistry registry, IPermissionEngine permissions, IPermissionApprover? approver = null)
+    /// <param name="cache">
+    /// Optional result cache. When supplied, read-only tools short-circuit on a cache hit, their
+    /// successful results are stored, and a successful mutating tool invalidates the cache. With no
+    /// cache, the pipeline behaves as before.
+    /// </param>
+    public ToolPipeline(
+        IToolRegistry registry,
+        IPermissionEngine permissions,
+        IPermissionApprover? approver = null,
+        IToolResultCache? cache = null)
     {
         _registry = registry;
         _permissions = permissions;
         _approver = approver;
+        _cache = cache;
     }
 
     public async ValueTask<ToolResult> ExecuteAsync(ToolCall call, SessionState state, CancellationToken cancellationToken)
@@ -96,8 +107,17 @@ public sealed class ToolPipeline
                 return ToolResult.PermissionDenied(decision.Reason, decision.RetryHint);
             }
 
-            // Step 6 — cache-lookup (read-only tools only). Future seam; a miss is not a failure.
+            // Step 6 — cache-lookup. Read-only tools only; a hit short-circuits before execute.
             AddStep("cache-lookup");
+            string? cacheKey = null;
+            if (_cache is not null && tool.IsReadOnly)
+            {
+                cacheKey = $"{tool.Name}|{CanonicalizeJson(arguments)}";
+                if (_cache.TryGet(cacheKey, out var cached))
+                {
+                    return cached;
+                }
+            }
 
             // Step 7 — pre-hook. Future seam; non-fatal.
             AddStep("pre-hook");
@@ -121,23 +141,31 @@ public sealed class ToolPipeline
                     retryHint: "The tool threw an unexpected error. Re-check the arguments, or try a different approach.");
             }
 
+            // Empty-success normalization happens here so the cached value matches what we return.
+            if (result.Kind == ToolResultKind.Success && string.IsNullOrWhiteSpace(result.Content))
+            {
+                result = ToolResult.Empty($"Tool '{call.Name}' completed but produced no output.");
+            }
+
             // Step 9 — post-hook. Future seam; non-fatal, result not modified.
             AddStep("post-hook");
 
             // Step 10 — artifact-store (large Success previews). Future seam.
             AddStep("artifact-store");
 
-            // Step 11 — cache-write (read-only Success only). Future seam.
+            // Step 11 — cache-write: only Success on a read-only tool (skip errors and Empty).
             AddStep("cache-write");
-
-            // Step 12 — invalidate (after mutating tools). Future seam.
-            AddStep("invalidate");
-
-            // A tool that succeeds but returns no content is reported as Empty so the model
-            // gets a distinct, non-Success signal rather than a blank Success.
-            if (result.Kind == ToolResultKind.Success && string.IsNullOrWhiteSpace(result.Content))
+            if (_cache is not null && cacheKey is not null && result.Kind == ToolResultKind.Success)
             {
-                return ToolResult.Empty($"Tool '{call.Name}' completed but produced no output.");
+                _cache.Set(cacheKey, result);
+            }
+
+            // Step 12 — invalidate: a successful mutating tool drops every cached read so stale
+            // reads can't survive. Conservative; finer per-capability invalidation is future work.
+            AddStep("invalidate");
+            if (_cache is not null && !tool.IsReadOnly && result.Kind == ToolResultKind.Success)
+            {
+                _cache.InvalidateAll();
             }
 
             return result;
@@ -188,4 +216,8 @@ public sealed class ToolPipeline
             StepLog.Add(step);
         }
     }
+
+    /// <summary>Stable cache-key form of the arguments — re-serialize so equivalent JSON canonicalises.</summary>
+    private static string CanonicalizeJson(JsonDocument arguments) =>
+        JsonSerializer.Serialize(arguments.RootElement, JsonOptions.Default);
 }
