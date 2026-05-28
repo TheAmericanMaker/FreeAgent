@@ -29,7 +29,8 @@ public static class Program
         var model = settings.Model!;
 
         // ── bootstrap ──────────────────────────────────────────────
-        if (string.IsNullOrWhiteSpace(apiKey))
+        // Ollama is unauthenticated by default; everyone else requires an API key.
+        if (string.IsNullOrWhiteSpace(apiKey) && providerName != "ollama")
         {
             var keyEnv = providerName switch
             {
@@ -51,12 +52,20 @@ public static class Program
         var anthropicThinkingBudget = int.TryParse(Environment.GetEnvironmentVariable("FREE_THINKING_BUDGET"), out var tb) && tb > 0
             ? tb : 0;
 
+        // Ollama-only tuning. Both knobs are opt-in; Ollama uses the model's Modelfile defaults
+        // otherwise.
+        var ollamaNumCtx = int.TryParse(Environment.GetEnvironmentVariable("FREE_NUM_CTX"), out var nc) && nc > 0
+            ? nc : (int?)null;
+        var ollamaTemperature = double.TryParse(Environment.GetEnvironmentVariable("FREE_TEMPERATURE"), System.Globalization.CultureInfo.InvariantCulture, out var tp)
+            ? tp : (double?)null;
+
         IProvider provider = providerName switch
         {
             "anthropic" => new AnthropicProvider(baseUrl, apiKey, model, anthropicMaxTokens, anthropicThinkingBudget),
             "azure" => new AzureOpenAIProvider(
                 endpoint: baseUrl, apiKey: apiKey, deployment: model,
                 apiVersion: settings.ApiVersion ?? AzureOpenAIProvider.DefaultApiVersion),
+            "ollama" => new OllamaProvider(baseUrl, model, ollamaNumCtx, ollamaTemperature),
             _ => new OpenAIProvider(baseUrl, apiKey, model),
         };
         var registry = new ToolRegistry();

@@ -29,6 +29,8 @@ public sealed class ProviderConfig
     public const string DefaultModel = "gpt-4o-mini";
     public const string AnthropicDefaultBaseUrl = "https://api.anthropic.com";
     public const string AnthropicDefaultModel = "claude-3-7-sonnet-latest";
+    public const string OllamaDefaultBaseUrl = "http://localhost:11434";
+    public const string OllamaDefaultModel = "qwen2.5-coder";
 
     /// <summary>Provider key — <c>openai</c> (default) or <c>anthropic</c>. Env <c>FREEPROVIDER</c> overrides.</summary>
     public string? Provider { get; init; }
@@ -46,6 +48,9 @@ public sealed class ProviderConfig
 
     /// <summary>Optional explicit Azure OpenAI section. <c>Model</c> here is the deployment name.</summary>
     public ProviderSettings? Azure { get; init; }
+
+    /// <summary>Optional explicit Ollama section. <c>ApiKey</c> is ignored (Ollama is unauthenticated by default).</summary>
+    public ProviderSettings? Ollama { get; init; }
 
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web)
     {
@@ -71,6 +76,18 @@ public sealed class ProviderConfig
                 Model:   Resolve(
                     Environment.GetEnvironmentVariable("FREEMODEL") ?? Environment.GetEnvironmentVariable("ANTHROPIC_MODEL"),
                     Anthropic?.Model, AnthropicDefaultModel));
+        }
+
+        if (string.Equals(provider, "ollama", StringComparison.OrdinalIgnoreCase))
+        {
+            return new ProviderSettings(
+                BaseUrl: Resolve(Environment.GetEnvironmentVariable("OLLAMA_HOST"), Ollama?.BaseUrl, OllamaDefaultBaseUrl),
+                // Ollama doesn't require auth; we still accept and forward an api key field for parity
+                // with the other provider sections so a single config schema covers everyone.
+                ApiKey:  Resolve(Environment.GetEnvironmentVariable("OLLAMA_API_KEY"),  Ollama?.ApiKey,  string.Empty),
+                Model:   Resolve(
+                    Environment.GetEnvironmentVariable("FREEMODEL") ?? Environment.GetEnvironmentVariable("OLLAMA_MODEL"),
+                    Ollama?.Model, OllamaDefaultModel));
         }
 
         if (string.Equals(provider, "azure", StringComparison.OrdinalIgnoreCase))

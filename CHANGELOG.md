@@ -6,6 +6,19 @@ All notable changes to FreeAgent are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added — native Ollama provider
+
+- **`OllamaProvider`** — native client for Ollama's `POST /api/chat` endpoint (newline-delimited
+  JSON streaming, not SSE). Maps Ollama's tool-call shape (`message.tool_calls[].function`) to
+  `StreamChunk.ToolCallDelta` with synthesized ids (`call_0`, `call_1`, …) since `/api/chat`
+  doesn't emit ids itself. Usage extracted from `prompt_eval_count` / `eval_count` on `done:true`.
+  Malformed JSON lines are skipped (matches the OpenAI/Anthropic adapters' robustness). Optional
+  `numCtx` and `temperature` ctor params emit an `options` block; both can be set from the host via
+  `FREE_NUM_CTX` and `FREE_TEMPERATURE` env vars.
+- **`FREEPROVIDER=ollama`** — selects Ollama via the existing provider switch. No API key required
+  (Ollama is unauthenticated by default). `OLLAMA_HOST` defaults to `http://localhost:11434`;
+  `OLLAMA_MODEL` or `FREEMODEL` selects the model. `ProviderConfig` learns an `Ollama` section.
+
 ### Added — extended thinking + token budgets
 
 - **Anthropic extended thinking** — `AnthropicProvider` now takes `thinkingBudgetTokens` (default
