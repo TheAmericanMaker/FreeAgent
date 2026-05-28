@@ -40,6 +40,16 @@ public sealed class SessionRuntime
     public async ValueTask<TurnResult> RunTurnAsync(string userText, CancellationToken cancellationToken)
     {
         _doomLoop.Reset();
+
+        // If the previous turn pushed us past the compaction threshold, drop older turns before
+        // appending this turn's user message and contacting the provider.
+        if (Compactor.ShouldCompact(_state.LastInputTokens, _state.ContextWindow))
+        {
+            var compacted = Compactor.Compact(_state.Messages);
+            _state.Messages.Clear();
+            _state.Messages.AddRange(compacted);
+        }
+
         _state.Messages.Add(new Message(MessageRole.User, userText));
         var finalText = new StringBuilder();
         var doomDetected = false;
@@ -80,6 +90,8 @@ public sealed class SessionRuntime
                 if (chunk.Usage is not null)
                 {
                     _events.OnUsage(chunk.Usage);
+                    if (chunk.Usage.InputTokens > 0)
+                        _state.LastInputTokens = chunk.Usage.InputTokens;
                 }
             }
 

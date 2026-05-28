@@ -51,8 +51,12 @@ see below.)
   without forking the adapter; typed **request options** + a provider-agnostic **`StopReason`**;
   and a formal provider **registry keyed by wire-API** (`openai-completions`, `anthropic-messages`,
   …) rather than by vendor, with a separate model registry.
-- [ ] **Context-window management** — token tracking, checkpointing, and compaction so
-  long sessions don't overrun the window (FreeAgent has none today).
+- [x] **Context-window management** — done: per-turn input-token tracking in `SessionState`,
+  configurable `ContextWindow` (env `FREE_CONTEXT_TOKENS`), and pre-turn **turn-aware** compaction
+  that drops older `User → Assistant → Tool` blocks (preserving `tool_use` / `tool_result`
+  pairings and the user-first alternation), prepending a notice to the first kept user message.
+  Remaining/next: **LLM-based summarization** of the dropped turns (replace the notice with a
+  real summary).
 - [ ] **Result cache + artifact store** — fill the `cache-lookup` / `cache-write` /
   `invalidate` and `artifact-store` pipeline seams (offload large tool outputs and
   return a reference to the model).
@@ -161,3 +165,4 @@ from the current per-turn `MaxIterations`) would be a separate counter if ever a
 - [x] User-editable system prompt injected on new sessions (`~/.config/freeagent/system.md` + project override)
 - [x] `/help`, `/status`, `/model` slash commands (in addition to `/plan`)
 - [x] Native Anthropic Messages-API streaming provider (text / thinking / tool-use, cache-aware normalized `Usage`) + `FREEPROVIDER` selection with per-provider config sections
+- [x] Context-window safety net — token tracking + pre-turn turn-aware compaction (no LLM summary yet)

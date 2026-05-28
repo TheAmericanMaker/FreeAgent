@@ -6,6 +6,15 @@ All notable changes to FreeAgent are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added — robustness
+
+- **Context-window compaction** — `SessionState` tracks `LastInputTokens` (from `Usage`) and a
+  configurable `ContextWindow` (env `FREE_CONTEXT_TOKENS`); when the previous turn pushed input
+  tokens past 80% of the window, `SessionRuntime` calls `Compactor.Compact` before the next turn —
+  a pure, turn-aware drop that preserves leading System messages, the last 4 turns, and every
+  `tool_use` ↔ `tool_result` pairing, with a notice prepended to the first kept user message.
+  LLM-based summarization of the dropped turns is the next step.
+
 ### Added — providers
 
 - **Native Anthropic provider** — `AnthropicProvider` (Messages API; streaming text, thinking, and

@@ -27,4 +27,16 @@ public sealed class SessionState
     /// for the rest of the session. In-memory only; not persisted.
     /// </summary>
     public HashSet<string> SessionApprovals { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Input tokens reported by the provider on the most recent turn (the model's count of what we
+    /// sent). Used by the runtime to decide when to compact. In-memory only; not persisted.
+    /// </summary>
+    public int LastInputTokens { get; set; }
+
+    /// <summary>
+    /// Model context-window size in tokens, used together with <see cref="LastInputTokens"/> to
+    /// decide compaction. Default 128k; the host may override per provider/model. In-memory only.
+    /// </summary>
+    public int ContextWindow { get; set; } = 128_000;
 }

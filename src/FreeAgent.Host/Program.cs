@@ -64,6 +64,8 @@ public static class Program
         var state = options.Resume
             ? await ResumeOrFreshAsync(store, workingDir, options.ResumeId)
             : NewSession(workingDir);
+        if (int.TryParse(Environment.GetEnvironmentVariable("FREE_CONTEXT_TOKENS"), out var ctx) && ctx > 0)
+            state.ContextWindow = ctx;
         var runtime = new SessionRuntime(provider, registry, pipeline, store, events, state);
 
         // ── launch ─────────────────────────────────────────────────
