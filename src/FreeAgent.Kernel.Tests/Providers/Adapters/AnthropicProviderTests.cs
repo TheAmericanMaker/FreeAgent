@@ -201,6 +201,53 @@ public sealed class AnthropicProviderTests : IDisposable
     }
 
     [Fact]
+    public async Task ExtendedThinking_EmitsThinkingBlockWithBudget()
+    {
+        WireResponse("data: {\"type\":\"message_stop\"}\n\n");
+        _provider = new AnthropicProvider(_httpClient, "https://fake.local/", thinkingBudgetTokens: 4096);
+
+        await _provider.StreamChatAsync(StubRequest(), default).ToListAsync();
+
+        _handler.LastBody.Should().Contain("\"thinking\":{\"type\":\"enabled\",\"budget_tokens\":4096}");
+    }
+
+    [Fact]
+    public async Task ExtendedThinking_OmittedWhenBudgetIsZero()
+    {
+        WireResponse("data: {\"type\":\"message_stop\"}\n\n");
+        _provider = NewProvider(); // default = no thinking
+
+        await _provider.StreamChatAsync(StubRequest(), default).ToListAsync();
+
+        _handler.LastBody.Should().NotContain("\"thinking\"");
+    }
+
+    [Fact]
+    public async Task ExtendedThinking_AutoBumpsMaxTokensAboveBudget()
+    {
+        // max_tokens (default 4096) below budget would be rejected by Anthropic; the provider
+        // should bump max_tokens to (budget + headroom).
+        WireResponse("data: {\"type\":\"message_stop\"}\n\n");
+        _provider = new AnthropicProvider(_httpClient, "https://fake.local/", thinkingBudgetTokens: 8000);
+
+        await _provider.StreamChatAsync(StubRequest(), default).ToListAsync();
+
+        _handler.LastBody.Should().Contain("\"max_tokens\":9024"); // 8000 + 1024 headroom
+    }
+
+    [Fact]
+    public async Task ExtendedThinking_PreservesLargerCallerMaxTokens()
+    {
+        // Caller-supplied max_tokens already exceeds budget+headroom; should be kept as-is.
+        WireResponse("data: {\"type\":\"message_stop\"}\n\n");
+        _provider = new AnthropicProvider(_httpClient, "https://fake.local/", maxTokens: 16384, thinkingBudgetTokens: 4096);
+
+        await _provider.StreamChatAsync(StubRequest(), default).ToListAsync();
+
+        _handler.LastBody.Should().Contain("\"max_tokens\":16384");
+    }
+
+    [Fact]
     public async Task NoTools_OmitsToolsProperty()
     {
         WireResponse("data: {\"type\":\"message_stop\"}\n\n");

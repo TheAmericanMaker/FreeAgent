@@ -43,9 +43,17 @@ public static class Program
             return;
         }
 
+        // Per-request budgets (Anthropic-only today). FREE_MAX_TOKENS overrides the default 4096
+        // ceiling on the visible reply; FREE_THINKING_BUDGET enables extended thinking with the
+        // given token budget for the reasoning trace.
+        var anthropicMaxTokens = int.TryParse(Environment.GetEnvironmentVariable("FREE_MAX_TOKENS"), out var mt) && mt > 0
+            ? mt : AnthropicProvider.DefaultMaxTokens;
+        var anthropicThinkingBudget = int.TryParse(Environment.GetEnvironmentVariable("FREE_THINKING_BUDGET"), out var tb) && tb > 0
+            ? tb : 0;
+
         IProvider provider = providerName switch
         {
-            "anthropic" => new AnthropicProvider(baseUrl, apiKey, model),
+            "anthropic" => new AnthropicProvider(baseUrl, apiKey, model, anthropicMaxTokens, anthropicThinkingBudget),
             "azure" => new AzureOpenAIProvider(
                 endpoint: baseUrl, apiKey: apiKey, deployment: model,
                 apiVersion: settings.ApiVersion ?? AzureOpenAIProvider.DefaultApiVersion),

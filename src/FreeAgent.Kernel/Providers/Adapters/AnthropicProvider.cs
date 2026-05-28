@@ -22,14 +22,25 @@ public sealed class AnthropicProvider : IProvider, IDisposable
     /// <summary>Anthropic requires <c>max_tokens</c>; this is the default when callers don't override it.</summary>
     public const int DefaultMaxTokens = 4096;
 
+    /// <summary>
+    /// Headroom required between <c>max_tokens</c> and <c>thinking.budget_tokens</c> when extended
+    /// thinking is enabled. Anthropic rejects requests where the visible reply budget can't even fit
+    /// alongside the reasoning trace — auto-bump <c>max_tokens</c> by this much so callers don't have
+    /// to remember the constraint.
+    /// </summary>
+    private const int ThinkingMaxTokensHeadroom = 1024;
+
     private readonly string _model;
     private readonly int _maxTokens;
+    private readonly int _thinkingBudgetTokens;
     private readonly HttpClient _httpClient;
     private readonly Uri _baseUri;
     private readonly bool _ownsClient;
     private bool _disposed;
 
-    public AnthropicProvider(string baseUrl, string apiKey, string model = "claude-3-7-sonnet-latest", int maxTokens = DefaultMaxTokens)
+    public AnthropicProvider(
+        string baseUrl, string apiKey, string model = "claude-3-7-sonnet-latest",
+        int maxTokens = DefaultMaxTokens, int thinkingBudgetTokens = 0)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(baseUrl);
         ArgumentException.ThrowIfNullOrWhiteSpace(apiKey);
@@ -37,6 +48,7 @@ public sealed class AnthropicProvider : IProvider, IDisposable
 
         _model = model;
         _maxTokens = maxTokens;
+        _thinkingBudgetTokens = thinkingBudgetTokens < 0 ? 0 : thinkingBudgetTokens;
         _ownsClient = true;
         _httpClient = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
         _httpClient.DefaultRequestHeaders.Add("x-api-key", apiKey);
@@ -44,7 +56,9 @@ public sealed class AnthropicProvider : IProvider, IDisposable
         _baseUri = new Uri(baseUrl.TrimEnd('/') + "/");
     }
 
-    public AnthropicProvider(HttpClient httpClient, string baseUrl, string model = "claude-3-7-sonnet-latest", int maxTokens = DefaultMaxTokens)
+    public AnthropicProvider(
+        HttpClient httpClient, string baseUrl, string model = "claude-3-7-sonnet-latest",
+        int maxTokens = DefaultMaxTokens, int thinkingBudgetTokens = 0)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(baseUrl);
         ArgumentException.ThrowIfNullOrWhiteSpace(model);
@@ -52,6 +66,7 @@ public sealed class AnthropicProvider : IProvider, IDisposable
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _model = model;
         _maxTokens = maxTokens;
+        _thinkingBudgetTokens = thinkingBudgetTokens < 0 ? 0 : thinkingBudgetTokens;
         _ownsClient = false;
         _baseUri = new Uri(baseUrl.TrimEnd('/') + "/");
     }
@@ -177,7 +192,24 @@ public sealed class AnthropicProvider : IProvider, IDisposable
 
         writer.WriteStartObject();
         writer.WriteString("model", _model);
-        writer.WriteNumber("max_tokens", _maxTokens);
+
+        // When extended thinking is enabled, Anthropic requires max_tokens > budget_tokens. Auto-bump
+        // by a fixed headroom so the user only has to set one knob (the budget) and forgets the
+        // constraint.
+        var effectiveMaxTokens = _thinkingBudgetTokens > 0
+            ? Math.Max(_maxTokens, _thinkingBudgetTokens + ThinkingMaxTokensHeadroom)
+            : _maxTokens;
+        writer.WriteNumber("max_tokens", effectiveMaxTokens);
+
+        if (_thinkingBudgetTokens > 0)
+        {
+            writer.WritePropertyName("thinking");
+            writer.WriteStartObject();
+            writer.WriteString("type", "enabled");
+            writer.WriteNumber("budget_tokens", _thinkingBudgetTokens);
+            writer.WriteEndObject();
+        }
+
         writer.WriteBoolean("stream", true);
 
         // System messages → top-level "system" param (concatenated).

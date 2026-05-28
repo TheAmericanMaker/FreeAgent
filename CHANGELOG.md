@@ -6,6 +6,20 @@ All notable changes to FreeAgent are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added — extended thinking + token budgets
+
+- **Anthropic extended thinking** — `AnthropicProvider` now takes `thinkingBudgetTokens` (default
+  0 = disabled). When > 0 the request body emits
+  `"thinking":{"type":"enabled","budget_tokens":N}` and auto-bumps `max_tokens` to
+  `max(maxTokens, budget + 1024)` so callers don't have to remember the API constraint that the
+  visible-reply ceiling must exceed the reasoning budget. The provider already routed
+  `thinking_delta` SSE events as `StreamChunk.ThinkingDelta` so consumer UIs see the reasoning
+  trace separately from the final reply. Negative budgets are clamped to 0.
+- **Per-request budget env vars** — `FREE_MAX_TOKENS` overrides the default 4096 ceiling on the
+  visible reply; `FREE_THINKING_BUDGET=N` enables extended thinking with that token budget. Both
+  Anthropic-only today (OpenAI / Azure don't require `max_tokens` and their thinking control is
+  different).
+
 ### Added — session forking
 
 - **`/fork`** — snapshots the current transcript to `session-fork-<id>.jsonl` alongside the live

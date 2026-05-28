@@ -180,8 +180,12 @@ Phasing (the kernel is *already* effectively headless — `SessionRuntime` + `IE
   capped to 10 visible with overflow summary), and **session forking** (`/fork` snapshots the
   current transcript to `session-fork-<id>.jsonl` alongside the live file with a fresh 8-char id,
   via a dedicated `JsonlSessionStore`; the live session is untouched and the fork is promoted by
-  `mv …jsonl session.jsonl && freeagent --resume <id>`) done. Remaining:
-  **extended-thinking + token-budget controls**.
+  `mv …jsonl session.jsonl && freeagent --resume <id>`), and **extended-thinking + token-budget
+  controls** (Anthropic provider takes `maxTokens` and `thinkingBudgetTokens` ctor params; the
+  request body emits `thinking: {type: "enabled", budget_tokens: N}` only when budget > 0 and
+  auto-bumps `max_tokens` to `max(maxTokens, budget + 1024)` so callers don't have to remember the
+  constraint; env vars `FREE_MAX_TOKENS` and `FREE_THINKING_BUDGET` wire through from the host)
+  done. Misc section complete.
 
 ## Deliberately deferred
 
