@@ -29,9 +29,13 @@ public static class Program
         var model = settings.Model!;
 
         // ── bootstrap ──────────────────────────────────────────────
-        // Ollama and Bedrock are unauthenticated-here by default (Bedrock uses the AWS credential
-        // chain, not an inline API key); everyone else requires an API key in the bootstrap.
-        if (string.IsNullOrWhiteSpace(apiKey) && providerName != "ollama" && providerName != "bedrock")
+        // Ollama, Bedrock, and Vertex are unauthenticated-here by default (Bedrock uses the AWS
+        // credential chain; Vertex uses GCP ADC, not an inline API key); everyone else requires an
+        // API key in the bootstrap.
+        if (string.IsNullOrWhiteSpace(apiKey)
+            && providerName != "ollama"
+            && providerName != "bedrock"
+            && providerName != "vertex")
         {
             var keyEnv = providerName switch
             {
@@ -71,6 +75,13 @@ public static class Program
             // turns it into an endpoint via RegionEndpoint.GetBySystemName. Auth flows through
             // the default AWS credential chain.
             "bedrock" => new BedrockProvider(region: baseUrl, modelId: model, maxTokens: anthropicMaxTokens),
+            // For Vertex, settings.BaseUrl is the GCP project id and ApiVersion carries the
+            // region/location. Auth uses Google Application Default Credentials.
+            "vertex" => new VertexProvider(
+                projectId: baseUrl,
+                location: settings.ApiVersion ?? ProviderConfig.VertexDefaultLocation,
+                modelId: model,
+                maxTokens: anthropicMaxTokens),
             _ => new OpenAIProvider(baseUrl, apiKey, model),
         };
         var registry = new ToolRegistry();

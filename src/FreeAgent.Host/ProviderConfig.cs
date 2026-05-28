@@ -34,6 +34,8 @@ public sealed class ProviderConfig
     public const string OllamaDefaultModel = "qwen2.5-coder";
     public const string BedrockDefaultRegion = "us-east-1";
     public const string BedrockDefaultModel = BedrockProvider.DefaultModelId;
+    public const string VertexDefaultLocation = "us-central1";
+    public const string VertexDefaultModel = VertexProvider.DefaultModelId;
 
     /// <summary>Provider key — <c>openai</c> (default) or <c>anthropic</c>. Env <c>FREEPROVIDER</c> overrides.</summary>
     public string? Provider { get; init; }
@@ -57,6 +59,12 @@ public sealed class ProviderConfig
 
     /// <summary>Optional explicit AWS Bedrock section. <c>BaseUrl</c> is the AWS region (e.g. "us-east-1"); <c>ApiKey</c> is ignored (auth comes from the default AWS credential chain).</summary>
     public ProviderSettings? Bedrock { get; init; }
+
+    /// <summary>Optional explicit Vertex section. <c>BaseUrl</c> is the GCP project id; <c>ApiKey</c> is ignored (auth flows through Application Default Credentials).</summary>
+    public ProviderSettings? Vertex { get; init; }
+
+    /// <summary>Vertex-only: GCP location (e.g. "us-central1"). Env <c>VERTEX_LOCATION</c> overrides.</summary>
+    public string? VertexLocation { get; init; }
 
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web)
     {
@@ -82,6 +90,19 @@ public sealed class ProviderConfig
                 Model:   Resolve(
                     Environment.GetEnvironmentVariable("FREEMODEL") ?? Environment.GetEnvironmentVariable("ANTHROPIC_MODEL"),
                     Anthropic?.Model, AnthropicDefaultModel));
+        }
+
+        if (string.Equals(provider, "vertex", StringComparison.OrdinalIgnoreCase))
+        {
+            return new ProviderSettings(
+                // For Vertex the "BaseUrl" slot carries the GCP project id; the location is a
+                // separate field. Auth lives in Application Default Credentials.
+                BaseUrl: Resolve(Environment.GetEnvironmentVariable("VERTEX_PROJECT"), Vertex?.BaseUrl, string.Empty),
+                ApiKey:  string.Empty,
+                Model:   Resolve(
+                    Environment.GetEnvironmentVariable("FREEMODEL") ?? Environment.GetEnvironmentVariable("VERTEX_MODEL"),
+                    Vertex?.Model, VertexDefaultModel),
+                ApiVersion: Resolve(Environment.GetEnvironmentVariable("VERTEX_LOCATION"), VertexLocation, VertexDefaultLocation));
         }
 
         if (string.Equals(provider, "bedrock", StringComparison.OrdinalIgnoreCase))

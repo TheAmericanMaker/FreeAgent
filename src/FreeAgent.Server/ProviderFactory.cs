@@ -28,6 +28,7 @@ public sealed class ProviderFactory
             "azure" => new AzureOpenAIProvider(baseUrl, apiKey, model, settings.ApiVersion ?? AzureOpenAIProvider.DefaultApiVersion),
             "ollama" => new OllamaProvider(baseUrl, model),
             "bedrock" => new BedrockProvider(region: baseUrl, modelId: model),
+            "vertex" => new VertexProvider(projectId: baseUrl, location: settings.ApiVersion ?? ProviderConfig.VertexDefaultLocation, modelId: model),
             _ => new OpenAIProvider(baseUrl, apiKey, model),
         };
         return (provider, model, name);

@@ -6,6 +6,24 @@ All notable changes to FreeAgent are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added — Google Vertex AI provider
+
+- **`VertexProvider`** — native client for Anthropic Claude models on Google Vertex AI.
+  Auth flows through `Google.Apis.Auth`'s Application Default Credentials chain
+  (`GOOGLE_APPLICATION_CREDENTIALS` env var / gcloud auth / GCE metadata / SSO). The token source
+  is exposed via `VertexProvider.ITokenSource` so tests can inject a static bearer.
+- Endpoint: `https://{location}-aiplatform.googleapis.com/v1/projects/{project}/locations/
+  {location}/publishers/anthropic/models/{modelId}:streamRawPredict`. Body shape is identical to
+  the direct Anthropic API except `anthropic_version: vertex-2023-10-16` replaces the
+  top-level `model` field (which moves into the URL). SSE chunk dispatch reuses the Anthropic
+  shape (text / thinking / tool_use / stop_reason).
+- **`FREEPROVIDER=vertex`** wiring in `ProviderConfig`. `VERTEX_PROJECT` (required),
+  `VERTEX_LOCATION` (default `us-central1`), `VERTEX_MODEL` or `FREEMODEL` (default
+  `claude-3-7-sonnet@20250219`). No API key required at the host bootstrap check — auth is ADC.
+- 8 new tests cover URL composition, bearer-token plumbing, body shape (Vertex anthropic_version,
+  no top-level model, system hoisted), text-delta streaming, non-2xx wrapping, ctor validation,
+  and the default model id.
+
 ### Added — AWS Bedrock provider
 
 - **`BedrockProvider`** — official `AWSSDK.BedrockRuntime` SDK wrapper. SigV4 signing, region
