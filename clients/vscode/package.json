@@ -1,0 +1,41 @@
+{
+  "name": "freeagent-vscode",
+  "version": "0.1.0",
+  "private": true,
+  "displayName": "FreeAgent",
+  "description": "VS Code client for the FreeAgent.Server HTTP + SSE protocol.",
+  "publisher": "freeagent",
+  "engines": { "vscode": "^1.92.0" },
+  "categories": ["Other"],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      { "command": "freeagent.newSession", "title": "FreeAgent: New Session" },
+      { "command": "freeagent.askInline", "title": "FreeAgent: Ask…" }
+    ],
+    "configuration": {
+      "title": "FreeAgent",
+      "properties": {
+        "freeagent.baseUrl": {
+          "type": "string",
+          "default": "http://localhost:5000",
+          "description": "Base URL of the running FreeAgent.Server."
+        },
+        "freeagent.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Bearer token if the server is gated with FREEAGENT_SERVER_API_KEY."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ."
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.92.0",
+    "typescript": "^5.4.0"
+  }
+}

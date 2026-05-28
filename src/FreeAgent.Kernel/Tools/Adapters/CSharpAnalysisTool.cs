@@ -34,15 +34,17 @@ public sealed class CSharpAnalysisTool : ITool
         + "'list-members' lists methods/properties/fields per type. 'diagnostics' surfaces parse errors. "
         + "Semantic actions (full compilation): 'find-references' returns 'file:line:col' for every "
         + "binding to the named symbol; 'find-definition' returns the declaration site(s); "
-        + "'semantic-diagnostics' surfaces compiler errors and warnings (not just parse errors). "
-        + "Takes 'action' (required), 'symbol' (required for find-references / find-definition), and "
-        + "optional 'path' (file or directory, defaults to the workspace root) and 'glob' "
-        + "(e.g. 'src/**/*.cs'). Output capped to keep results bounded.";
+        + "'find-callers' returns every caller of a method/property (transitive blast radius "
+        + "via 'depth' arg, default 1); 'semantic-diagnostics' surfaces compiler errors and "
+        + "warnings (not just parse errors). Takes 'action' (required), 'symbol' (required for "
+        + "find-references / find-definition / find-callers), and optional 'path' (file or directory, "
+        + "defaults to the workspace root), 'glob' (e.g. 'src/**/*.cs'), and 'depth' (callers, 1–5). "
+        + "Output capped to keep results bounded.";
     public bool IsReadOnly => true;
     public bool IsConcurrencySafe => true;
 
     public JsonDocument InputSchema { get; } = JsonDocument.Parse(
-        """{"type":"object","required":["action"],"properties":{"action":{"type":"string","enum":["list-types","list-members","diagnostics","find-references","find-definition","semantic-diagnostics"]},"symbol":{"type":"string"},"path":{"type":"string"},"glob":{"type":"string"}}}""");
+        """{"type":"object","required":["action"],"properties":{"action":{"type":"string","enum":["list-types","list-members","diagnostics","find-references","find-definition","find-callers","semantic-diagnostics"]},"symbol":{"type":"string"},"path":{"type":"string"},"glob":{"type":"string"},"depth":{"type":"number"}}}""");
 
     public IReadOnlyList<Capability> RequiredCapabilities(JsonDocument arguments, ToolContext context) =>
         [new FileReadCap(ResolveRoot(arguments, context))];
@@ -60,7 +62,7 @@ public sealed class CSharpAnalysisTool : ITool
             return ToolResult.Empty($"No .cs files found under {root}.");
 
         // Semantic actions need the full compilation; route to that path and return immediately.
-        if (action is "find-references" or "find-definition" or "semantic-diagnostics")
+        if (action is "find-references" or "find-definition" or "find-callers" or "semantic-diagnostics")
         {
             return await ExecuteSemanticAsync(action, arguments, root, files, context.Session.WorkingDirectory, cancellationToken);
         }
@@ -94,7 +96,7 @@ public sealed class CSharpAnalysisTool : ITool
                 default:
                     return ToolResult.InvalidInput(
                         $"Unknown action '{action}'. Use 'list-types', 'list-members', 'diagnostics', "
-                        + "'find-references', 'find-definition', or 'semantic-diagnostics'.");
+                        + "'find-references', 'find-definition', 'find-callers', or 'semantic-diagnostics'.");
             }
 
             if (truncated)
@@ -149,6 +151,16 @@ public sealed class CSharpAnalysisTool : ITool
             var simpleName = symbolName.Contains('.') ? symbolName[(symbolName.LastIndexOf('.') + 1)..] : symbolName;
             var pathHint = symbolName;
 
+            // find-callers walks the call graph transitively across .cs files. depth=1 (default)
+            // is direct callers; depth=N (capped at 5) follows callers-of-callers up to N hops.
+            if (action == "find-callers")
+            {
+                var depth = arguments.RootElement.TryGetProperty("depth", out var dProp) && dProp.ValueKind == JsonValueKind.Number
+                    ? Math.Clamp(dProp.GetInt32(), 1, 5)
+                    : 1;
+                return await FindCallersAsync(compilation, simpleName, pathHint, depth, root, sb, lines, truncated, cancellationToken);
+            }
+
             foreach (var tree in compilation.SyntaxTrees)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -188,6 +200,93 @@ public sealed class CSharpAnalysisTool : ITool
         }
 
         return Final(sb, lines, truncated, action, root);
+    }
+
+    /// <summary>
+    /// Walk the call graph from the named symbol outward to <paramref name="maxDepth"/> hops.
+    /// Output is grouped by depth so the model can see the immediate callers, then their callers,
+    /// etc. — the "blast radius" of changing the target. Uses a single <see cref="Compilation"/>
+    /// and per-tree <see cref="SemanticModel"/>s; no Workspace is involved (keeps the dependency
+    /// matrix the same as <c>find-references</c>'s).
+    /// </summary>
+    private static async ValueTask<ToolResult> FindCallersAsync(
+        CSharpCompilation compilation,
+        string simpleName,
+        string pathHint,
+        int maxDepth,
+        string root,
+        StringBuilder sb,
+        int lines,
+        bool truncated,
+        CancellationToken cancellationToken)
+    {
+        await Task.Yield();
+
+        // Collect the seed symbols matching the requested name.
+        var seedSymbols = new List<ISymbol>();
+        foreach (var tree in compilation.SyntaxTrees)
+        {
+            var model = compilation.GetSemanticModel(tree);
+            foreach (var decl in tree.GetRoot().DescendantNodes().OfType<MemberDeclarationSyntax>())
+            {
+                var symbol = model.GetDeclaredSymbol(decl);
+                if (symbol is null) continue;
+                if (symbol.Name != simpleName) continue;
+                if (!SymbolMatches(symbol, simpleName, pathHint)) continue;
+                seedSymbols.Add(symbol);
+            }
+        }
+        if (seedSymbols.Count == 0)
+            return ToolResult.Empty($"No symbol matches '{pathHint}' in the workspace.");
+
+        // BFS outward from each seed. A symbol is "visited" by its ToDisplayString to handle
+        // overloads being distinct but partial declarations being the same.
+        var visited = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var s in seedSymbols) visited.Add(s.ToDisplayString());
+
+        var frontier = seedSymbols.Select(s => (Symbol: s, Depth: 0)).ToList();
+
+        while (frontier.Count > 0)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var nextFrontier = new List<(ISymbol Symbol, int Depth)>();
+
+            foreach (var (target, depth) in frontier)
+            {
+                if (depth >= maxDepth) continue;
+
+                foreach (var callerTree in compilation.SyntaxTrees)
+                {
+                    var callerModel = compilation.GetSemanticModel(callerTree);
+                    var relative = WorkspaceSearch.RelativePath(root, callerTree.FilePath);
+
+                    foreach (var invocation in callerTree.GetRoot().DescendantNodes().OfType<InvocationExpressionSyntax>())
+                    {
+                        var info = callerModel.GetSymbolInfo(invocation);
+                        var invoked = info.Symbol ?? info.CandidateSymbols.FirstOrDefault();
+                        if (invoked is null) continue;
+                        if (!SymbolEqualityComparer.Default.Equals(invoked.OriginalDefinition, target.OriginalDefinition))
+                            continue;
+
+                        // Find the enclosing member declaration so we can attribute the call.
+                        var enclosing = invocation.AncestorsAndSelf().OfType<MemberDeclarationSyntax>().FirstOrDefault();
+                        var enclosingSymbol = enclosing is null ? null : callerModel.GetDeclaredSymbol(enclosing);
+
+                        var pos = invocation.GetLocation().GetLineSpan().StartLinePosition;
+                        var enclosingDesc = enclosingSymbol?.ToDisplayString() ?? "<unknown>";
+                        if (!Append(sb, $"depth {depth + 1}: {relative}:{pos.Line + 1}:{pos.Character + 1}: {enclosingDesc} calls {target.ToDisplayString()}", ref lines, ref truncated))
+                            return Final(sb, lines, truncated, "find-callers", root);
+
+                        if (enclosingSymbol is not null && visited.Add(enclosingSymbol.ToDisplayString()))
+                            nextFrontier.Add((enclosingSymbol, depth + 1));
+                    }
+                }
+            }
+
+            frontier = nextFrontier;
+        }
+
+        return Final(sb, lines, truncated, "find-callers", root);
     }
 
     private static ToolResult Final(StringBuilder sb, int lines, bool truncated, string action, string root)

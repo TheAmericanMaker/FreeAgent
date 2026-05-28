@@ -184,6 +184,10 @@ public static class Program
         Console.WriteLine($"Session: {state.SessionId} | Model: {model} | Working directory: {workingDir}");
         Console.WriteLine("Type 'exit' or press Ctrl+C to quit.\n");
 
+        // Optional pinned-bottom status bar (FREE_STATUS_BAR=1). When disabled this is a no-op.
+        using var statusBar = new StatusBar();
+        statusBar.Render(state, model, providerName);
+
         // Register the Ctrl+C handler once. While a turn is running it cancels that
         // turn (without killing the process); when idle it lets the default abort
         // through so an empty prompt can still be escaped.
@@ -274,6 +278,10 @@ public static class Program
                 // non-null reference to an already-disposed source.
                 Interlocked.Exchange(ref turnCts, null)?.Dispose();
             }
+
+            // Repaint the status row after each turn so message counts, iterations, and plan mode
+            // reflect what just happened.
+            statusBar.Render(state, model, providerName);
         }
 
         fileWatcher?.Dispose();

@@ -145,8 +145,28 @@ public static class HostCommands
                 return $"Undone: deleted {snapshot.Path} (it did not exist before the change).";
             }
 
+            // Capture the current content so we can show what the undo reverts.
+            string? currentContent = null;
+            try { currentContent = File.ReadAllText(snapshot.Path); }
+            catch { /* fall back to a no-diff message */ }
+
             File.WriteAllText(snapshot.Path, snapshot.PreviousContent);
-            return $"Undone: restored {snapshot.Path} to its previous contents.";
+
+            var summary = $"Undone: restored {snapshot.Path} to its previous contents.";
+            if (currentContent is not null && currentContent != snapshot.PreviousContent)
+            {
+                // Show what just got reverted: the diff from "current" → "previous" before the
+                // undo, i.e. what was rolled back. Color is on by default for the host console.
+                var diff = ColoredDiff.Render(
+                    currentContent,
+                    snapshot.PreviousContent,
+                    oldLabel: $"{snapshot.Path} (reverted)",
+                    newLabel: $"{snapshot.Path} (restored)",
+                    color: true);
+                if (diff.Length > 0)
+                    summary += "\n" + diff;
+            }
+            return summary;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

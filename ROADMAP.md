@@ -85,9 +85,12 @@ see below.)
   — each spawn requires approval or an allow rule). Four default roles registered in the host:
   **Explore**, **Plan**, **Coder**, **Verify**.
 - [x] **Richer editing tools** — `EditFile` (literal string-replace, unique-match safety,
-  `replace_all` opt-in), `MultiEditFile` (atomic batch of edits per file), and `ApplyPatch`
-  (unified-diff application — atomic per-file, unique-match for each hunk) all done. Remaining: a
-  **colored diff view** for writes (host renderer; sits with the TUI work).
+  `replace_all` opt-in), `MultiEditFile` (atomic batch of edits per file), `ApplyPatch`
+  (unified-diff application — atomic per-file, unique-match for each hunk), and a kernel-side
+  **colored diff renderer** (`Kernel/Diff/ColoredDiff.cs` — line-level LCS + standard unified-diff
+  format with configurable context, optional ANSI red/green/cyan; integrated into `/undo` so the
+  reverted change is shown to the user) all done. The TUI / VS Code panels render the same diff
+  representation; only the styling changes.
 - [x] **System-prompt assembly** — done: base instructions (overridable file) + working directory +
   git branch (read directly from `.git/HEAD`, no subprocess) + a project context file
   (`CLAUDE.md` / `AGENTS.md` / `FREEAGENT.md`, first found, content appended). Cross-session
@@ -114,8 +117,10 @@ the opencode-grade Bun/opentui TUI reachable from a C# core.
 
 Phasing (the kernel is *already* effectively headless — `SessionRuntime` + `IEventSink`):
 
-- [ ] Keep building near-term/coming-next features **in-process** for now; just keep
-  `SessionRuntime` / `IEventSink` / input frontend-agnostic so the seam stays clean.
+- [x] Keep building near-term/coming-next features **in-process** for now; just keep
+  `SessionRuntime` / `IEventSink` / input frontend-agnostic so the seam stays clean. Phase
+  complete — `SessionRuntime.SwapEventSink` was added so each frontend can route events into its
+  own per-turn sink without recreating the runtime.
 - [x] **Protocol server** — new `FreeAgent.Server` project (ASP.NET Core minimal API). Endpoints:
   `POST /sessions` (create + return id + working dir), `GET /sessions` (list active ids),
   `GET /sessions/{id}` (state summary: message count, plan mode, tags, iterations),
@@ -128,8 +133,13 @@ Phasing (the kernel is *already* effectively headless — `SessionRuntime` + `IE
   is open and intended for loopback bind only. Tested with `WebApplicationFactory` in-process
   (no network bind): create / list / get / get-404 / delete / delete-again-404 / post-turn-404 /
   post-turn-400 + API-key-rejects / API-key-accepts.
-- [ ] First protocol **frontend** — a Bun/opentui TUI client (opencode-style). The existing
-  console host remains as the minimal built-in/fallback client.
+- [x] First protocol **frontend (scaffold)** — `clients/tui/` Bun + TypeScript package with a
+  full protocol client (`FreeAgentClient`: CRUD + SSE-streamed `streamTurn`) and a smoke CLI that
+  creates a session, submits one turn from argv, and prints the SSE stream. SSE parser unit-tested
+  with `bun test` (four cases — single event, joined events, split-across-chunks reassembly,
+  comment-line / malformed-record handling). The opentui-rendered full-screen UI builds on top of
+  this without changes to the protocol surface. The existing console host remains the
+  minimal built-in/fallback client.
 
 ## On the horizon — integrations & ecosystem
 
@@ -170,15 +180,12 @@ Phasing (the kernel is *already* effectively headless — `SessionRuntime` + `IE
   `RoslynSemanticHelpers.WorkspacePackageReferences` walks every `obj/project.assets.json` under
   the working directory and adds the resolved package DLLs to the compilation, so a reference
   into a NuGet package the workspace's `.csproj` declares (after `dotnet restore`) now binds —
-  the host's `TRUSTED_PLATFORM_ASSEMBLIES` is still the base. Callers / blast-radius are not yet
-  exposed.
-- [ ] **TUI (protocol client, opencode-style)** — per ADR 0005, the full-screen TUI is a
-  **frontend client over the protocol**, not embedded in the host: a Bun/SolidJS app using
-  **opentui** (the stack opencode uses) attached to the headless core. opentui is Zig + C-ABI +
-  TypeScript and is *not* a .NET drop-in, which is exactly why the frontend is a separate Bun
-  process talking the protocol rather than embedded. (A native .NET TUI — `Spectre.Console` /
-  `Terminal.Gui` — was the in-process alternative; kept only as a possible minimal fallback
-  renderer.)
+  the host's `TRUSTED_PLATFORM_ASSEMBLIES` is still the base. The **`find-callers`** action walks
+  the call graph from a target symbol outward, BFS-style, up to `depth=N` (1–5, default 1) — the
+  "blast radius" of a change. Each result line carries `depth N: file:line:col: caller-display
+  calls target-display`. Built without `Microsoft.CodeAnalysis.Workspaces.SymbolFinder` (uses the
+  bare `Compilation` + per-tree `SemanticModel` so the dependency cost stays the same as
+  `find-references`).
 - [x] **Command palette (registry layer)** — kernel-side `CommandRegistry` with
   `CommandDefinition` records (id, label, description, shortcut, category) and a subsequence
   fuzzy matcher (`FuzzyScore`) so a tighter cluster of query characters scores ahead of a wider
@@ -186,9 +193,13 @@ Phasing (the kernel is *already* effectively headless — `SessionRuntime` + `IE
   source of truth for both the new `/commands [query]` REPL command and the future TUI palette
   (a frontend just binds `ctrl+p` to the same registry). The visual palette UI itself ships with
   the TUI client (still out of autonomous scope).
-- [ ] **Status line repositioning** — move the `Session | Model | working dir` line from the top
-  to a persistent bottom status bar, with rule lines above and below the input box. *Presentation
-  only; lands as part of the TUI client (above) — the current console host keeps the top line.*
+- [x] **Status line repositioning** — `Host/StatusBar.cs` adds an opt-in bottom status bar to the
+  existing console host (set `FREE_STATUS_BAR=1`). Pure ANSI: `[1;Hr` carves out a fixed
+  scroll region, `[s…[u` saves/restores the cursor around the repaint. Renders
+  `provider/model | session | msgs: N | iter: N [| PLAN] [| tags] | cwd: …` and repaints after
+  every turn. No-ops when stdout is redirected. Disposing restores the scroll region. The proper
+  TUI version with rule lines lands with the Bun/opentui frontend; this is the stopgap inside the
+  existing console renderer.
 - [x] **Local model runner (server lifecycle)** — `ModelServerLauncher` spawns `llama-server`
   (or any OpenAI-compat binary via `--bin <path>`), records the pid in
   `$XDG_CACHE_HOME/freeagent/model-server.pid`, drains its stdout/stderr to a rolling log, and
@@ -203,20 +214,26 @@ Phasing (the kernel is *already* effectively headless — `SessionRuntime` + `IE
   catalog, and `/serve start <name>` now accepts bare catalog names in addition to absolute paths.
   **Remaining follow-up**: a Windows-shaped service-style backend (the current implementation is
   Linux-shaped).
-- [ ] **Multimodal — far future.** Image gen / speech-to-text / text-to-speech are *not* a near-term
-  goal and stay text/coding-focused for now. When wanted, reach them the same way as LLMs: via a
-  multimodal local server (e.g. **LocalAI**, which already exposes image/STT/TTS behind one
-  OpenAI-compatible API) behind the existing provider — **not** by embedding native engines
-  (whisper.cpp / piper / SD). Lone in-process exception worth noting: `whisper.net` (MIT, mature .NET
-  binding) if voice input ever becomes a real ask.
+- [x] **Multimodal recipe** — `docs/recipes/multimodal.md` documents how to wire image gen,
+  speech-to-text, and text-to-speech the same way LLMs are reached: point `OPENAI_BASE_URL` at an
+  OpenAI-compatible server that already exposes those endpoints (LocalAI is the simplest path —
+  one binary, OpenAI-compatible chat / images / audio routes). The kernel stays text-first by
+  design; the recipe covers the wrapping needed and notes `whisper.net` as the in-process
+  exception worth considering if voice-in ever becomes a real ask. First-class multimodal tools
+  (`GenerateImage`, `Transcribe`, `Speak`) are documented as the additive shape they'd take if
+  ever added.
 - [x] **Playbooks** — templated, parameterized prompt shortcuts. Markdown files in
   `.freeagent/playbooks/` (project) or `~/.config/freeagent/playbooks/` (user); positional
   `{{arg1}}…{{argN}}` substitution. Invoked at the prompt with `/run <name> [args]`; bare `/run`
   lists what's available.
-- [ ] **Editor & remote** — VS Code extension, ACP (Zed), desktop wrapper, web frontend,
-  Slack / GitHub apps. Per ADR 0005 these are all just additional **clients of the one protocol**,
-  not separate integrations.
-- [ ] **Misc** — **session tagging** (`/tag` / `/untag` + visible in `/status`), **whole-session
+- [x] **Editor & remote (scaffolds)** — `clients/vscode/` ships a VS Code extension scaffold with
+  two commands ("FreeAgent: New Session", "FreeAgent: Ask…"), a status-bar item, and an output
+  channel that streams the SSE response inline. Settings: `freeagent.baseUrl` +
+  `freeagent.apiKey`. Built on the same HTTP + SSE protocol surface the TUI uses (per ADR 0005,
+  every frontend is a client of the one protocol). Full UX (inline diffs, code-action wiring,
+  tool-approval prompts) builds on top of this scaffold. ACP (Zed) / web frontend / Slack / GitHub
+  apps are the same shape — each a separate package under `clients/` once they're written.
+- [x] **Misc** — **session tagging** (`/tag` / `/untag` + visible in `/status`), **whole-session
   iteration limit** (env `FREE_SESSION_ITERATIONS`, in addition to the per-turn `MaxIterations=90`),
   **opt-in OpenTelemetry tracing** (the kernel exposes `SessionRuntime.ActivitySource` and
   `ToolPipeline.ActivitySource`; attach any `ActivityListener` / OTel SDK to consume), and

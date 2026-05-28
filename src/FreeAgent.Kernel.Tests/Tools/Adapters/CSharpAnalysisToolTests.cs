@@ -260,6 +260,83 @@ public sealed class CSharpAnalysisToolTests
     }
 
     [Fact]
+    public async Task FindCallersLocatesDirectCallSites()
+    {
+        using var work = new TempWorkspace();
+        work.Write("Lib.cs", """
+            namespace N;
+            public static class Lib { public static void Run() { } }
+            """);
+        work.Write("A.cs", """
+            namespace N;
+            public class A { public void DoIt() { Lib.Run(); } }
+            """);
+
+        var tool = new CSharpAnalysisTool();
+        var result = await tool.ExecuteAsync(
+            Args(new { action = "find-callers", symbol = "Lib.Run" }),
+            Context(work.Root), CancellationToken.None);
+
+        result.Kind.Should().Be(ToolResultKind.Success);
+        result.Content.Should().Contain("depth 1").And.Contain("A.cs").And.Contain("DoIt").And.Contain("Lib.Run");
+    }
+
+    [Fact]
+    public async Task FindCallersWalksBlastRadiusWithDepth()
+    {
+        using var work = new TempWorkspace();
+        // Inner is called by Middle, which is called by Outer. depth=2 should surface both hops.
+        work.Write("Inner.cs", """
+            namespace N;
+            public static class Inner { public static void Bottom() { } }
+            """);
+        work.Write("Middle.cs", """
+            namespace N;
+            public static class Middle { public static void Step() { Inner.Bottom(); } }
+            """);
+        work.Write("Outer.cs", """
+            namespace N;
+            public static class Outer { public static void Top() { Middle.Step(); } }
+            """);
+
+        var tool = new CSharpAnalysisTool();
+        var result = await tool.ExecuteAsync(
+            Args(new { action = "find-callers", symbol = "Inner.Bottom", depth = 2 }),
+            Context(work.Root), CancellationToken.None);
+
+        result.Kind.Should().Be(ToolResultKind.Success);
+        result.Content.Should().Contain("depth 1").And.Contain("Middle.Step");
+        result.Content.Should().Contain("depth 2").And.Contain("Outer.Top");
+    }
+
+    [Fact]
+    public async Task FindCallersWithUnknownSymbolReturnsEmpty()
+    {
+        using var work = new TempWorkspace();
+        work.Write("a.cs", "namespace N; public class A {}");
+
+        var tool = new CSharpAnalysisTool();
+        var result = await tool.ExecuteAsync(
+            Args(new { action = "find-callers", symbol = "Nope.Missing" }),
+            Context(work.Root), CancellationToken.None);
+
+        result.Kind.Should().Be(ToolResultKind.Empty);
+    }
+
+    [Fact]
+    public async Task FindCallersRequiresSymbolArgument()
+    {
+        using var work = new TempWorkspace();
+        work.Write("a.cs", "class A {}");
+
+        var tool = new CSharpAnalysisTool();
+        var result = await tool.ExecuteAsync(
+            Args(new { action = "find-callers" }), Context(work.Root), CancellationToken.None);
+
+        result.Kind.Should().Be(ToolResultKind.InvalidInput);
+    }
+
+    [Fact]
     public async Task SemanticDiagnosticsReportsCompilerErrors()
     {
         using var work = new TempWorkspace();

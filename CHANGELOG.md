@@ -6,6 +6,59 @@ All notable changes to FreeAgent are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added — find-callers semantic action
+
+- **`CSharpAnalysis` gains `find-callers`** — walks the call graph outward from the target symbol
+  via BFS up to `depth=N` (1–5, default 1). Each result line carries `depth N: file:line:col:
+  caller-display calls target-display`, grouped by depth so the model sees the immediate callers
+  first, then their callers, etc. — the blast radius of a change. Implemented against the bare
+  `Compilation` + per-tree `SemanticModel` (uses `Microsoft.CodeAnalysis.CSharp.Workspaces`'s
+  symbol comparer; doesn't depend on `SymbolFinder`). 4 new tests cover direct callers,
+  multi-hop BFS, unknown-symbol empty result, and the missing-symbol validation.
+
+### Added — colored diff renderer
+
+- **`ColoredDiff.Render(oldText, newText, …)`** — kernel-side unified-diff renderer. Line-level
+  LCS, standard `@@ -a,b +c,d @@` hunk headers, configurable context (default 3), optional ANSI
+  styling (red for removals, green for additions, cyan for hunk headers — matches `git diff`).
+  Handles CRLF normalization, additions to empty files, deletions, and an arbitrary number of
+  context lines. 9 unit tests.
+- **`/undo` now shows what was reverted** — when the previous content differs from the current
+  on-disk content, the undo response includes a colored diff of the reverted change.
+
+### Added — status-bar (opt-in)
+
+- **`Host/StatusBar.cs`** — pinned bottom status row in the existing console host, enabled with
+  `FREE_STATUS_BAR=1`. Uses ANSI DECSTBM (`[1;Hr`) to carve out a fixed scroll region so
+  output scrolling above never touches the bottom line; `[s…[u` brackets the repaint so the
+  cursor returns to where the user was typing. No-ops when stdout is redirected. Renders
+  `provider/model | session | msgs: N | iter: N [| PLAN] [| tags] | cwd: …` and repaints after
+  every turn. Disposing restores the scroll region so the host's exit is clean. Stopgap until the
+  full TUI status bar lands with the Bun/opentui client.
+
+### Added — protocol-client scaffolds
+
+- **`clients/tui/`** — Bun + TypeScript package with a full protocol client (`FreeAgentClient`:
+  `createSession` / `listSessions` / `getSession` / `deleteSession` / SSE-streamed `streamTurn`)
+  and a smoke CLI that creates a session, submits one turn from argv, prints the SSE stream. SSE
+  parser unit-tested with `bun test`: single event, joined events, split-across-chunks
+  reassembly, comment-line / malformed-record handling. The opentui-rendered full-screen UI
+  builds on top of this without changes to the wire surface.
+- **`clients/vscode/`** — VS Code extension scaffold with "FreeAgent: New Session" + "FreeAgent:
+  Ask…" commands, a status-bar item, and an output channel streaming the SSE response inline.
+  Settings: `freeagent.baseUrl` + `freeagent.apiKey`. Inlines a minimal SSE parser today; a
+  shared `@freeagent/client` package is the obvious refactor when both clients grow more code.
+- **`clients/README.md`** — index documenting the per-client status and how each consumes
+  `/openapi/v1.json`.
+
+### Added — multimodal recipe
+
+- **`docs/recipes/multimodal.md`** — documents the LocalAI path for reaching image generation,
+  speech-to-text, and text-to-speech: point `OPENAI_BASE_URL` at LocalAI (one binary, OpenAI-
+  compatible chat + images + audio endpoints) and call the multimodal routes outside the agent.
+  Explains why the kernel stays text-first by design (multimodal-as-tools is additive — the
+  permission engine + artifact store already handle the shape).
+
 ### Fixed — MCP / LSP smoke tests now run cleanly
 
 - **Root cause**: against a zero-latency in-memory test transport, the `JsonRpcClient` read loop
