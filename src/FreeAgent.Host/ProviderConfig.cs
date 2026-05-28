@@ -2,21 +2,47 @@ using System.Text.Json;
 
 namespace FreeAgent.Host;
 
+/// <summary>Per-provider connection settings.</summary>
+public sealed record ProviderSettings(string? BaseUrl, string? ApiKey, string? Model);
+
 /// <summary>
-/// Provider/model settings loaded from a user-level config file so the bare <c>freeagent</c> command
-/// works without exporting environment variables in every shell. Resolution precedence is
-/// <b>environment variable &gt; config file &gt; built-in default</b>. The file is XDG-aware
+/// User-level config so the bare <c>freeagent</c> command works without exporting env vars in every
+/// shell. Resolution precedence is <b>provider-specific env var &gt; provider section in the config
+/// &gt; legacy flat field &gt; built-in default</b>. The file is XDG-aware
 /// (<c>$XDG_CONFIG_HOME/freeagent/config.json</c>, else <c>~/.config/freeagent/config.json</c>) and is
 /// distinct from the per-project <c>.freeagent/config.json</c>, which holds permission rules.
+/// <para>
+/// Schema (all fields optional):
+/// <code>
+/// {
+///   "provider": "openai" | "anthropic",    // selects the IProvider
+///   "baseUrl": "...", "apiKey": "...", "model": "...",   // legacy flat = openai defaults
+///   "openai":    { "baseUrl": "...", "apiKey": "...", "model": "..." },
+///   "anthropic": { "baseUrl": "...", "apiKey": "...", "model": "..." }
+/// }
+/// </code>
+/// </para>
 /// </summary>
-public sealed record ProviderConfig
+public sealed class ProviderConfig
 {
     public const string DefaultBaseUrl = "https://api.openai.com/v1";
     public const string DefaultModel = "gpt-4o-mini";
+    public const string AnthropicDefaultBaseUrl = "https://api.anthropic.com";
+    public const string AnthropicDefaultModel = "claude-3-7-sonnet-latest";
 
+    /// <summary>Provider key — <c>openai</c> (default) or <c>anthropic</c>. Env <c>FREEPROVIDER</c> overrides.</summary>
+    public string? Provider { get; init; }
+
+    /// <summary>Legacy flat fields — interpreted as OpenAI defaults for back-compat.</summary>
     public string? BaseUrl { get; init; }
     public string? ApiKey { get; init; }
     public string? Model { get; init; }
+
+    /// <summary>Optional explicit OpenAI section (takes precedence over the flat fields).</summary>
+    public ProviderSettings? Openai { get; init; }
+
+    /// <summary>Optional explicit Anthropic section.</summary>
+    public ProviderSettings? Anthropic { get; init; }
 
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web)
     {
@@ -24,9 +50,31 @@ public sealed record ProviderConfig
         AllowTrailingCommas = true
     };
 
-    public string ResolveBaseUrl() => Resolve(Environment.GetEnvironmentVariable("OPENAI_BASE_URL"), BaseUrl, DefaultBaseUrl);
-    public string ResolveApiKey() => Resolve(Environment.GetEnvironmentVariable("OPENAI_API_KEY"), ApiKey, string.Empty);
-    public string ResolveModel() => Resolve(Environment.GetEnvironmentVariable("FREEMODEL"), Model, DefaultModel);
+    /// <summary>Active provider, normalized to lowercase. Env <c>FREEPROVIDER</c> overrides the config.</summary>
+    public string ResolveProvider() =>
+        Resolve(Environment.GetEnvironmentVariable("FREEPROVIDER"), Provider, "openai").Trim().ToLowerInvariant();
+
+    /// <summary>
+    /// Resolved settings for <paramref name="provider"/>: env (provider-specific) > config section >
+    /// legacy flat field (openai only) > built-in default.
+    /// </summary>
+    public ProviderSettings SettingsFor(string provider)
+    {
+        if (string.Equals(provider, "anthropic", StringComparison.OrdinalIgnoreCase))
+        {
+            return new ProviderSettings(
+                BaseUrl: Resolve(Environment.GetEnvironmentVariable("ANTHROPIC_BASE_URL"), Anthropic?.BaseUrl, AnthropicDefaultBaseUrl),
+                ApiKey:  Resolve(Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY"),  Anthropic?.ApiKey,  string.Empty),
+                Model:   Resolve(
+                    Environment.GetEnvironmentVariable("FREEMODEL") ?? Environment.GetEnvironmentVariable("ANTHROPIC_MODEL"),
+                    Anthropic?.Model, AnthropicDefaultModel));
+        }
+
+        return new ProviderSettings(
+            BaseUrl: Resolve(Environment.GetEnvironmentVariable("OPENAI_BASE_URL"), Openai?.BaseUrl ?? BaseUrl, DefaultBaseUrl),
+            ApiKey:  Resolve(Environment.GetEnvironmentVariable("OPENAI_API_KEY"),  Openai?.ApiKey  ?? ApiKey,  string.Empty),
+            Model:   Resolve(Environment.GetEnvironmentVariable("FREEMODEL"),       Openai?.Model   ?? Model,   DefaultModel));
+    }
 
     /// <summary>Pure precedence rule: first non-blank of env, then file, then fallback.</summary>
     public static string Resolve(string? env, string? file, string fallback) =>

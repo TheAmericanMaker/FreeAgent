@@ -43,16 +43,14 @@ see below.)
 
 ## Coming next — larger features
 
-- [ ] **More providers + provider-model hardening** — native Anthropic (Messages API), plus
-  Azure OpenAI, Bedrock, Vertex, and Groq behind the existing `IProvider` seam. The single
-  `StreamChatAsync` seam is the right shape (pi-mono uses essentially one streaming method too),
-  but to make "add any provider anytime, no core change" real, add the scaffolding around it that
-  pi-mono has: a first-class **`Model` metadata record** (id / wire-API / baseUrl / context window /
-  max tokens / cost / reasoning) on `ProviderRequest`; **normalized `Usage`** (cache read/write,
-  total, cost) not just raw tokens; **per-model compat flags** to absorb OpenAI-compatible variants
-  without forking the adapter; typed **request options** + a provider-agnostic **`StopReason`**; and a
-  provider **registry keyed by wire-API** (`openai-completions`, `anthropic-messages`, …) rather than
-  by vendor, with a separate model registry.
+- [ ] **More providers + provider-model scaffolding** — *Anthropic done (see Done).* Remaining:
+  additional providers (Azure OpenAI, Bedrock, Vertex, Groq) behind the existing seam, plus the
+  scaffolding the single `StreamChatAsync` seam still lacks (pi-mono pattern): a first-class
+  **`Model` metadata record** (id / wire-API / baseUrl / context window / max tokens / cost /
+  reasoning) on `ProviderRequest`; **per-model compat flags** to absorb OpenAI-compatible variants
+  without forking the adapter; typed **request options** + a provider-agnostic **`StopReason`**;
+  and a formal provider **registry keyed by wire-API** (`openai-completions`, `anthropic-messages`,
+  …) rather than by vendor, with a separate model registry.
 - [ ] **Context-window management** — token tracking, checkpointing, and compaction so
   long sessions don't overrun the window (FreeAgent has none today).
 - [ ] **Result cache + artifact store** — fill the `cache-lookup` / `cache-write` /
@@ -156,3 +154,10 @@ from the current per-turn `MaxIterations`) would be a separate counter if ever a
 - [x] Plan-mode toggle — `EnterPlanMode` / `ExitPlanMode` tools and a `/plan` host command
 - [x] Config-driven permission rules (`PermissionConfig`, `.freeagent/config.json`)
 - [x] Session resume — host `--resume [id]`
+
+### Agent UX wave
+
+- [x] Interactive permission approval (engine `Prompt` outcome, `IPermissionApprover` seam, session grants, console approver, denial-text fix)
+- [x] User-editable system prompt injected on new sessions (`~/.config/freeagent/system.md` + project override)
+- [x] `/help`, `/status`, `/model` slash commands (in addition to `/plan`)
+- [x] Native Anthropic Messages-API streaming provider (text / thinking / tool-use, cache-aware normalized `Usage`) + `FREEPROVIDER` selection with per-provider config sections

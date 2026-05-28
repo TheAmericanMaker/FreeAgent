@@ -22,20 +22,27 @@ public static class Program
 
         var workingDir = Environment.CurrentDirectory;
         var providerConfig = ProviderConfig.Load();
-        var baseUrl = providerConfig.ResolveBaseUrl();
-        var apiKey = providerConfig.ResolveApiKey();
-        var model = providerConfig.ResolveModel();
+        var providerName = providerConfig.ResolveProvider();
+        var settings = providerConfig.SettingsFor(providerName);
+        var baseUrl = settings.BaseUrl!;
+        var apiKey = settings.ApiKey!;
+        var model = settings.Model!;
 
         // ── bootstrap ──────────────────────────────────────────────
         if (string.IsNullOrWhiteSpace(apiKey))
         {
-            Console.Error.WriteLine("Error: no API key found.");
-            Console.Error.WriteLine($"Set OPENAI_API_KEY, or add \"apiKey\" to {ProviderConfig.ConfigPath()}.");
+            var keyEnv = providerName == "anthropic" ? "ANTHROPIC_API_KEY" : "OPENAI_API_KEY";
+            Console.Error.WriteLine($"Error: no API key found for provider '{providerName}'.");
+            Console.Error.WriteLine($"Set {keyEnv}, or add the key to {ProviderConfig.ConfigPath()}.");
             Environment.Exit(1);
             return;
         }
 
-        var provider = new OpenAIProvider(baseUrl, apiKey, model);
+        IProvider provider = providerName switch
+        {
+            "anthropic" => new AnthropicProvider(baseUrl, apiKey, model),
+            _ => new OpenAIProvider(baseUrl, apiKey, model),
+        };
         var registry = new ToolRegistry();
         var permissions = new PermissionEngine();
         LoadPermissionConfig(permissions, workingDir);
@@ -159,12 +166,15 @@ public static class Program
               exit | quit       End the session (also saved on Ctrl+D / EOF).
               Ctrl+C            Cancel the current turn without quitting.
 
-            CONFIGURATION (precedence: environment > config file > default)
-              OPENAI_API_KEY    Provider API key (required).
-              OPENAI_BASE_URL   Endpoint base (default {ProviderConfig.DefaultBaseUrl}).
-              FREEMODEL         Model name (default {ProviderConfig.DefaultModel}).
-              User config:      {ProviderConfig.ConfigPath()}  (baseUrl / model / apiKey)
-              Permissions:      ./.freeagent/config.json  (allow/deny rules)
+            CONFIGURATION (precedence: provider-specific env > config section > legacy > default)
+              FREEPROVIDER       Active provider — "openai" (default) or "anthropic".
+              OPENAI_API_KEY     Key for the OpenAI-compatible provider.
+              OPENAI_BASE_URL    Endpoint base (default {ProviderConfig.DefaultBaseUrl}).
+              ANTHROPIC_API_KEY  Key for the native Anthropic provider.
+              ANTHROPIC_BASE_URL Endpoint base (default {ProviderConfig.AnthropicDefaultBaseUrl}).
+              FREEMODEL          Model name (provider-agnostic env override).
+              User config:       {ProviderConfig.ConfigPath()}  (provider + per-provider sections)
+              Permissions:       ./.freeagent/config.json  (allow/deny rules)
             """);
     }
 

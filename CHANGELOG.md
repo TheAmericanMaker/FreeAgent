@@ -6,6 +6,16 @@ All notable changes to FreeAgent are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added — providers
+
+- **Native Anthropic provider** — `AnthropicProvider` (Messages API; streaming text, thinking, and
+  tool-use blocks; consecutive `Tool` results merged into one user message with `tool_result` blocks
+  per Anthropic's role-alternation rule). 10 tests cover SSE parsing and request-body shape.
+- **Provider selection** — `FREEPROVIDER` env / `provider` config field selects `openai` (default)
+  or `anthropic`; per-provider config sections (`openai`, `anthropic`); `ANTHROPIC_API_KEY` /
+  `ANTHROPIC_BASE_URL` / `ANTHROPIC_MODEL` envs. Legacy flat fields preserved for OpenAI.
+- **Normalized `Usage`** — additive `CacheReadTokens` / `CacheWriteTokens` (populated by Anthropic).
+
 ### Added — agent UX
 
 - **Slash commands** — `/help`, `/status`, `/model` added alongside `/plan`, in a testable
