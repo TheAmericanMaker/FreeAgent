@@ -92,7 +92,7 @@ public static class Program
 
             if (input.StartsWith('/'))
             {
-                HandleCommand(input, state);
+                HostCommands.Handle(input, state, model);
                 continue;
             }
 
@@ -231,30 +231,6 @@ public static class Program
         catch (Exception ex) when (ex is JsonException or ArgumentException or IOException or UnauthorizedAccessException)
         {
             Console.Error.WriteLine($"Warning: ignoring permission config '{path}': {ex.Message}");
-        }
-    }
-
-    /// <summary>
-    /// Handles a slash command typed at the prompt. Today only <c>/plan [on|off]</c> exists (the
-    /// model can also toggle it via the EnterPlanMode/ExitPlanMode tools); the switch is the seam for
-    /// future commands.
-    /// </summary>
-    private static void HandleCommand(string input, SessionState state)
-    {
-        var parts = input.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        switch (parts[0].ToLowerInvariant())
-        {
-            case "/plan":
-                state.PlanMode = parts.Length > 1 && parts[1] is "on" or "off"
-                    ? parts[1] == "on"
-                    : !state.PlanMode;
-                Console.WriteLine(state.PlanMode
-                    ? "Plan mode: ON — only read-only tools will run until you turn it off."
-                    : "Plan mode: OFF — writable tools are enabled.");
-                break;
-            default:
-                Console.WriteLine($"Unknown command: {parts[0]}. Available: /plan [on|off]");
-                break;
         }
     }
 

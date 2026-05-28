@@ -8,6 +8,8 @@ All notable changes to FreeAgent are recorded here. The format follows
 
 ### Added — agent UX
 
+- **Slash commands** — `/help`, `/status`, `/model` added alongside `/plan`, in a testable
+  `HostCommands` dispatcher (extracted from `Program`).
 - **System prompt (user-editable)** — new sessions now start with a grounding system message
   (agent identity, tool-first behavior, "denied is final — don't invent an approval dialog", be
   concise) + the working directory. Overridable via `.freeagent/system.md` (project) or

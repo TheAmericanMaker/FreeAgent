@@ -36,7 +36,7 @@ see below.)
 - [ ] **Local-server providers** — Ollama already works via
   `OPENAI_BASE_URL=http://localhost:11434/v1`; consider a native Ollama provider for its
   non-OpenAI features (a recipe is in `docs/usage.md`).
-- [ ] **More slash commands** — `/status`, `/model`, `/help` alongside the existing `/plan`
+- [x] **More slash commands** — `/status`, `/model`, `/help` alongside the existing `/plan`
   (the host command dispatch is in place). Feature-specific commands (`/compact`, `/undo`,
   `/commit`, …) arrive with their backing features below, and a `ctrl+p` command palette
   eventually supersedes slash-commands in the TUI (see On the horizon).
