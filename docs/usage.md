@@ -115,6 +115,40 @@ export AZURE_OPENAI_API_VERSION=2024-08-01-preview   # optional
 freeagent
 ```
 
+#### AWS Bedrock (Anthropic on Bedrock)
+
+Bedrock uses the default AWS credential chain — env vars, shared
+profile, IMDS, SSO — so there's no FreeAgent-specific secret. Make
+sure your account has the model enabled in the chosen region.
+
+```bash
+export FREEPROVIDER=bedrock
+export AWS_REGION=us-east-1                       # default if unset
+export AWS_ACCESS_KEY_ID=...                      # or use a shared profile
+export AWS_SECRET_ACCESS_KEY=...
+export BEDROCK_MODEL=anthropic.claude-3-7-sonnet-20250219-v1:0   # default
+freeagent
+```
+
+`AWSSDK.BedrockRuntime` handles SigV4 signing, region routing, retries,
+and event-stream framing; the adapter just translates the request
+body and dispatches the chunks.
+
+#### Google Vertex AI (Anthropic on Vertex)
+
+Vertex uses Google Application Default Credentials. The simplest path
+is `gcloud auth application-default login`; alternatively set
+`GOOGLE_APPLICATION_CREDENTIALS` to a service-account JSON.
+
+```bash
+export FREEPROVIDER=vertex
+export VERTEX_PROJECT=my-gcp-project              # required
+export VERTEX_LOCATION=us-central1                # default if unset
+export VERTEX_MODEL=claude-3-7-sonnet@20250219    # default
+gcloud auth application-default login             # one-time, if not using a service account
+freeagent
+```
+
 ## At the prompt
 
 ```

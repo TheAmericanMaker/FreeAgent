@@ -116,7 +116,7 @@ The host is configured through environment variables and a few flags.
 
 | Variable          | Default     | Purpose                                                                                    |
 | ----------------- | ----------- | ------------------------------------------------------------------------------------------ |
-| `FREEPROVIDER`    | `openai`    | Active provider — `openai`, `anthropic`, `azure`, or `ollama`.                            |
+| `FREEPROVIDER`    | `openai`    | Active provider — `openai`, `anthropic`, `azure`, `ollama`, `bedrock`, or `vertex`.        |
 | `FREEMODEL`       | per-provider| Model name (also `OPENAI_MODEL` / `ANTHROPIC_MODEL` / `AZURE_OPENAI_DEPLOYMENT` / `OLLAMA_MODEL`). |
 
 OpenAI / OpenAI-compat:
@@ -152,6 +152,21 @@ Ollama (`FREEPROVIDER=ollama`, no API key needed):
 | `OLLAMA_MODEL`    | `qwen2.5-coder`          | Model name.                                          |
 | `FREE_NUM_CTX`    | (off)                    | Per-request `num_ctx` in Ollama options.            |
 | `FREE_TEMPERATURE`| (off)                    | Per-request `temperature` in Ollama options.        |
+
+AWS Bedrock (`FREEPROVIDER=bedrock`, auth from default AWS credential chain — env, profile, IMDS, SSO):
+
+| Variable          | Default                                              | Purpose                                |
+| ----------------- | ---------------------------------------------------- | -------------------------------------- |
+| `AWS_REGION`      | `us-east-1`                                          | Region the SDK targets.               |
+| `BEDROCK_MODEL`   | `anthropic.claude-3-7-sonnet-20250219-v1:0`          | Bedrock model id.                     |
+
+Google Vertex AI (`FREEPROVIDER=vertex`, auth from GCP Application Default Credentials):
+
+| Variable          | Default                          | Purpose                                              |
+| ----------------- | -------------------------------- | ---------------------------------------------------- |
+| `VERTEX_PROJECT`  | —                                | GCP project id (required).                          |
+| `VERTEX_LOCATION` | `us-central1`                    | GCP region for the Vertex endpoint.                 |
+| `VERTEX_MODEL`    | `claude-3-7-sonnet@20250219`     | Vertex model id (Anthropic-on-Vertex naming).       |
 
 #### Other host knobs
 
@@ -442,16 +457,25 @@ exercises yet — networked tools, VCS tooling, sub-agents, and memory are the
 natural next adapters.
 
 **Now shipped (since the original "out of scope" list above was written):**
-sub-agents, playbooks, MCP client (integration test currently `[Skip]`'d due to a
-runner interaction with background-loop disposal), native Anthropic + native
-Azure OpenAI + native Ollama providers, Roslyn-based syntactic analysis
-(`CSharpAnalysis` tool), local model server lifecycle (`/serve`), opt-in
-workspace file watching, session forking (`/fork`), and Anthropic extended
-thinking (`FREE_THINKING_BUDGET`).
+sub-agents, playbooks, **MCP client**, **LSP client** (both `[Skip]`'d
+integration smoke tests due to a JsonRpcClient + xUnit runner interaction;
+the protocol code is exercised by the matching tool adapters), native
+**Anthropic / Azure OpenAI / Ollama / AWS Bedrock / Google Vertex**
+providers, **Roslyn syntactic + semantic** analysis (`CSharpAnalysis`
+tool — `find-references` / `find-definition` / `semantic-diagnostics`
+over a real `CSharpCompilation`), **local model server lifecycle**
+(`/serve`), opt-in workspace file watching, session forking (`/fork`),
+Anthropic **extended thinking** (`FREE_THINKING_BUDGET`),
+**`StopReason` + `Model` + `ModelCatalog`** provider-model scaffolding,
+the **`FreeAgent.Server` HTTP + SSE protocol surface** (per ADR 0005,
+with an OpenAPI spec served at `/openapi/v1.json` and an optional
+bearer-token gate), and a **`CommandRegistry` + `/commands`** palette
+layer for the future TUI to bind against.
 
 Still **deliberately deferred:** a full-screen TUI (planned as a Bun/opentui
-client over the headless-core protocol — see ADR 0005), LSP integration,
-AWS Bedrock / Google Vertex providers (provider-specific auth), the
-HTTP+SSE protocol server, multimodal generation, and Roslyn *semantic*
-analysis (find-references, callers, blast-radius — requires a full
-`Compilation` with metadata references).
+client over the headless-core protocol — see ADR 0005), editor &
+remote integrations (VS Code, ACP, web, Slack/GitHub apps), multimodal
+generation, a `.csproj`-aware reference resolver for Roslyn semantic
+actions (workspace + .NET stdlib is supported today; NuGet packages the
+host doesn't ship aren't), and command palette **UI** (the registry
+layer is in; the visual palette ships with the TUI).
