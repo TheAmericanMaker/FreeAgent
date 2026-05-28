@@ -6,6 +6,14 @@ All notable changes to FreeAgent are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added — grounding
+
+- **System-prompt assembly** — the system prompt now layers (in order): base text (default or
+  user-editable override) → working directory → git branch (read straight from `.git/HEAD`, no
+  subprocess, silently skipped if absent) → project context file content (first existing of
+  `CLAUDE.md` / `AGENTS.md` / `FREEAGENT.md` in the working dir). Memory is exposed as tools so
+  the model loads it deliberately rather than auto-injecting every entry.
+
 ### Added — cross-session memory
 
 - **`ReadMemoryTool` / `WriteMemoryTool`** — markdown-file-backed memory under

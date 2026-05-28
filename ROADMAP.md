@@ -71,8 +71,12 @@ see below.)
 - [x] **Richer editing tools** — `EditFile` (literal string-replace with unique-match safety;
   `replace_all` opt-in) done. Remaining: **MultiEdit** (atomic batch of edits per file),
   **ApplyPatch** (unified diff), **colored diff view** for writes.
-- [ ] **System-prompt assembly** — base instructions + a project file (e.g. `CLAUDE.md`)
-  + git branch/status + cross-session memory.
+- [x] **System-prompt assembly** — done: base instructions (overridable file) + working directory +
+  git branch (read directly from `.git/HEAD`, no subprocess) + a project context file
+  (`CLAUDE.md` / `AGENTS.md` / `FREEAGENT.md`, first found, content appended). Cross-session
+  memory is exposed as **tools** (`ReadMemoryTool` / `WriteMemoryTool`) so the model loads
+  memory deliberately rather than every entry being auto-injected. *Remaining (later): git status
+  summary in addition to branch; memory-key inventory in the prompt if useful.*
 - [x] **Cross-session memory** — `ReadMemoryTool` (read-only, auto-allowed via `MemoryCap` read) +
   `WriteMemoryTool` (writable, requires approval), backed by markdown files under
   `~/.config/freeagent/memory/` (XDG-aware). Keys restricted to `[A-Za-z0-9._-]+`. Registered in
@@ -178,3 +182,4 @@ from the current per-turn `MaxIterations`) would be a separate counter if ever a
 - [x] Result cache — read-only `Success` cached, mutating tools invalidate (`cache-lookup` / `cache-write` / `invalidate` seams filled)
 - [x] File history + `/undo` — per-write snapshots in `SessionState.History`, restored or deleted by `HostCommands.Undo`
 - [x] Cross-session memory — `ReadMemoryTool` / `WriteMemoryTool` (filesystem-backed, XDG-aware)
+- [x] System-prompt assembly — base + working dir + git branch (from `.git/HEAD`) + project context file (`CLAUDE.md` / `AGENTS.md` / `FREEAGENT.md`)
