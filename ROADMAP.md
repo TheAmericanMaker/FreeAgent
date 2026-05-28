@@ -18,16 +18,34 @@ Mostly small, because the design already has the hook. Generally more pressing t
 the larger ported features further down. (The first daily-driver batch is now done —
 see below.)
 
+- [ ] **Interactive permission approval** — today an uncovered capability is denied with
+  no way to approve it live, so the only approval channel is hand-writing
+  `.freeagent/config.json` (and the model tends to hallucinate an approval UI that isn't
+  there). Intercept the engine's "needs approval" denial in the host and prompt
+  `[allow once / session / always→write a rule / deny]`; carry session grants in
+  `SessionState`; tighten the denial text. The kernel already returns a clean,
+  distinct denial for exactly this. **Highest-impact near-term item — it currently blocks
+  real edits.**
 - [ ] **Local-server providers** — Ollama already works via
   `OPENAI_BASE_URL=http://localhost:11434/v1`; consider a native Ollama provider for its
   non-OpenAI features (a recipe is in `docs/usage.md`).
-- [ ] **More slash commands** — `/status`, `/model`, `/help` alongside the existing
-  `/plan` (the host command dispatch is in place).
+- [ ] **More slash commands** — `/status`, `/model`, `/help` alongside the existing `/plan`
+  (the host command dispatch is in place). Feature-specific commands (`/compact`, `/undo`,
+  `/commit`, …) arrive with their backing features below, and a `ctrl+p` command palette
+  eventually supersedes slash-commands in the TUI (see On the horizon).
 
 ## Coming next — larger features
 
-- [ ] **More providers** — native Anthropic (Messages API), plus Azure OpenAI, Bedrock,
-  Vertex, and Groq behind the existing `IProvider` seam.
+- [ ] **More providers + provider-model hardening** — native Anthropic (Messages API), plus
+  Azure OpenAI, Bedrock, Vertex, and Groq behind the existing `IProvider` seam. The single
+  `StreamChatAsync` seam is the right shape (pi-mono uses essentially one streaming method too),
+  but to make "add any provider anytime, no core change" real, add the scaffolding around it that
+  pi-mono has: a first-class **`Model` metadata record** (id / wire-API / baseUrl / context window /
+  max tokens / cost / reasoning) on `ProviderRequest`; **normalized `Usage`** (cache read/write,
+  total, cost) not just raw tokens; **per-model compat flags** to absorb OpenAI-compatible variants
+  without forking the adapter; typed **request options** + a provider-agnostic **`StopReason`**; and a
+  provider **registry keyed by wire-API** (`openai-completions`, `anthropic-messages`, …) rather than
+  by vendor, with a separate model registry.
 - [ ] **Context-window management** — token tracking, checkpointing, and compaction so
   long sessions don't overrun the window (FreeAgent has none today).
 - [ ] **Result cache + artifact store** — fill the `cache-lookup` / `cache-write` /
@@ -43,10 +61,21 @@ see below.)
   + git branch/status + cross-session memory.
 - [ ] **Cross-session memory** — `MemoryCap` is modeled; add a memory store and a
   read/write tool.
-- [ ] **Slash commands** — `/help`, `/status`, `/model`, `/compact`, `/commit`,
-  `/review`, `/doctor`, `/undo`.
 - [ ] **File history & undo** — per-write snapshots, a `/undo`, and session revert to a
   prior turn.
+
+## Architecture decisions to make
+
+- [ ] **Headless core + protocol, with pluggable frontends** (decide before betting on a TUI).
+  opencode (the current Bun/TypeScript version) shows a clean pattern: a headless agent **server**
+  — an HTTP API described by an **OpenAPI spec** plus an SSE `/event` stream — with the TUI as a
+  pure **client** that holds zero agent logic and can `attach` to a local *or remote* server.
+  Adopting this for FreeAgent (the C# kernel exposes the server; clients are generated from the
+  spec) would make the **TUI, a web frontend, editor integrations, and ACP all clients of one
+  protocol** rather than separate builds — and would let a JS/opentui frontend pair with the C#
+  core without embedding either language in the other. The alternative is keeping a single
+  in-process host with a native .NET TUI embedded directly. **This decision gates the TUI options
+  below.**
 
 ## On the horizon — integrations & ecosystem
 
@@ -56,13 +85,29 @@ see below.)
   `diagnostics`.
 - [ ] **Roslyn tool** — C# semantic analysis (overview, find-references, callers,
   blast-radius), relevant since FreeAgent itself is C#.
-- [ ] **Full-screen TUI** — a richer renderer alongside the current console `IEventSink`.
+- [ ] **TUI** — a full-screen renderer beyond the current console `IEventSink`. Two routes,
+  pending the architecture decision above:
+  - **(a) Native .NET TUI** embedded in the host — `Spectre.Console` or `Terminal.Gui`. Single
+    language and process; simplest; no protocol needed.
+  - **(b) Separate frontend over the protocol** — e.g. a Bun/SolidJS app using **opentui** (what
+    opencode uses) attached to the headless core. Note: opentui is **Zig + C-ABI + TypeScript and
+    is not a drop-in for .NET** — P/Invoking its C ABI would mean reimplementing its entire TS
+    framework layer (layout/render-loop/components), so the realistic opentui route is a separate
+    Bun frontend (a polyglot stack). Buys reuse of opentui's components and a shared path with the
+    web/editor frontends, at the cost of a second toolchain.
+- [ ] **Command palette** — a `ctrl+p` fuzzy command palette backed by a command registry, the
+  opencode model: named, dispatchable commands with metadata that feed both keybindings and the
+  palette. Supersedes ad-hoc slash-commands (the host already has a command-dispatch seam).
+- [ ] **Status line repositioning** — move the `Session | Model | working dir` line from the top
+  to a persistent bottom status bar, with rule lines above and below the input box. *Presentation
+  only; the actual design waits on the TUI route chosen above.*
 - [ ] **Local inference orchestration** — an optional Docker wrapper that launches and
   manages a llama.cpp (or similar) server, mirroring OpenMono's bundled-server model.
 - [ ] **Vision / multimodal input** — image inputs within a turn.
 - [ ] **Playbooks** — templated, parameterized workflows.
 - [ ] **Editor & remote** — VS Code extension, ACP (Zed), desktop wrapper, web frontend,
-  Slack / GitHub apps.
+  Slack / GitHub apps. If the headless-core + protocol decision lands, these are all just
+  additional clients of that one protocol rather than separate integrations.
 - [ ] **Misc** — extended thinking + token budgets, session tagging/forking, file
   watching during a session, opt-in OpenTelemetry tracing.
 
