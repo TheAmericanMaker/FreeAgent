@@ -37,6 +37,9 @@ public sealed class PermissionConfig
     /// <summary>Optional MCP server configuration — servers to spawn at host startup.</summary>
     [JsonPropertyName("mcp")] public McpConfig? Mcp { get; init; }
 
+    /// <summary>Optional LSP server configuration — language servers to spawn at host startup.</summary>
+    [JsonPropertyName("lsp")] public LspConfig? Lsp { get; init; }
+
     public sealed record CapabilityRuleConfig(string Capability, string? Pattern = null);
 
     /// <summary>Parses and validates a config document. Throws <see cref="JsonException"/> on malformed

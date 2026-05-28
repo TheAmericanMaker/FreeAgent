@@ -105,6 +105,12 @@ public static class Program
         if (projectConfig?.Mcp?.Servers is { Count: > 0 } mcpServers)
             await mcpManager.StartAsync(mcpServers, registry, default);
 
+        // LSP servers (if any) — spawn each, run initialize, register four tools per server:
+        // lsp__{name}__{hover|definition|references|open}.
+        var lspManager = new LspServerManager();
+        if (projectConfig?.Lsp?.Servers is { Count: > 0 } lspServers)
+            await lspManager.StartAsync(lspServers, registry, workingDirectory: workingDir, default);
+
         // Sub-agents — restricted-tool roles that the main agent can spawn for sub-tasks.
         var agents = new AgentRegistry();
         agents.Register(new AgentDefinition(

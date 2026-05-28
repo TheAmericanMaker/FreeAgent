@@ -127,8 +127,18 @@ Phasing (the kernel is *already* effectively headless — `SessionRuntime` + `IE
   server can be allow- or deny-ruled). Configured via `mcp.servers[]` in `.freeagent/config.json`.
   Integration smoke test is `[Skip]`'d due to a runner interaction with background-loop disposal
   across test classes; passes in isolation. End-to-end with real MCP servers untested.
-- [ ] **LSP client** — language-server-backed `hover` / `definition` / `references` /
-  `diagnostics`.
+- [x] **LSP client** — language-server-backed `hover` / `definition` / `references` (and an
+  `open` action to load file text into the server). `ILspTransport` seam alongside the existing
+  `IMcpTransport` — both extend a new `IJsonRpcTransport` base so `JsonRpcClient` is reusable for
+  any JSON-RPC peer regardless of framing. LSP uses <c>Content-Length</c> framing handled by
+  `StdioLspTransport`. `LspClient` exposes `InitializeAsync` + `DidOpenAsync` + per-method
+  position lookups; `LspToolAdapter` registers four tools per server
+  (`lsp__{name}__{hover|definition|references|open}`); `LspServerManager` spawns the configured
+  servers at host startup. Configured via `lsp.servers[]` in `.freeagent/config.json`; required
+  capability is a `ProcessExecCap("lsp:{server}", …)` so a whole server can be allow- or
+  deny-ruled as a unit (mirrors the MCP adapter shape). End-to-end smoke test is `[Skip]`'d for
+  the same runner interaction the MCP test hits; passes in isolation. Server-pushed
+  `publishDiagnostics` notifications are currently dropped — wire that to a tool in a follow-up.
 - [x] **Roslyn tool (syntactic)** — `CSharpAnalysisTool` parses `.cs` files with
   `CSharpSyntaxTree` (no semantic model / metadata references, so the dependency stays parse-only)
   and exposes three actions: `list-types` (one line per class/interface/struct/record/enum/delegate

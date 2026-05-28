@@ -4,13 +4,14 @@ using System.Text.Json;
 namespace FreeAgent.Kernel;
 
 /// <summary>
-/// Minimal JSON-RPC 2.0 client over an <see cref="IMcpTransport"/>: serial outgoing IDs, a
+/// Minimal JSON-RPC 2.0 client over an <see cref="IJsonRpcTransport"/>: serial outgoing IDs, a
 /// background read loop dispatches responses to waiting <see cref="TaskCompletionSource{TResult}"/>s
-/// by id. Used by <see cref="McpClient"/>; reusable for any line-delimited JSON-RPC peer.
+/// by id. Used by <see cref="McpClient"/> and <see cref="LspClient"/>; reusable for any peer that
+/// speaks JSON-RPC 2.0 envelopes (the transport handles framing).
 /// </summary>
 public sealed class JsonRpcClient : IAsyncDisposable, IDisposable
 {
-    private readonly IMcpTransport _transport;
+    private readonly IJsonRpcTransport _transport;
     private readonly Dictionary<int, TaskCompletionSource<JsonElement>> _pending = new();
     private readonly object _gate = new();
     private readonly CancellationTokenSource _shutdown = new();
@@ -18,7 +19,7 @@ public sealed class JsonRpcClient : IAsyncDisposable, IDisposable
     private int _nextId;
     private int _disposed;
 
-    public JsonRpcClient(IMcpTransport transport)
+    public JsonRpcClient(IJsonRpcTransport transport)
     {
         _transport = transport ?? throw new ArgumentNullException(nameof(transport));
         // Start without Task.Run: the async loop yields on the first await and continues on the

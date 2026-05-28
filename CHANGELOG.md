@@ -6,6 +6,23 @@ All notable changes to FreeAgent are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added — LSP client
+
+- **`LspClient` + `StdioLspTransport` + `LspServerManager` + `LspToolAdapter`** — language-server
+  integration for `hover` / `definition` / `references`, plus an `open` action that pushes file
+  text into the server before lookups. Shares `JsonRpcClient` with the MCP layer; the transport
+  contract was hoisted into a new `IJsonRpcTransport` base that both `IMcpTransport` and
+  `ILspTransport` extend. LSP framing (`Content-Length: N\r\n\r\n{body}`) is handled by
+  `StdioLspTransport`.
+- **`lsp.servers[]` config** — declares each language server with name, language id, file
+  extensions, command, and args. `LspServerManager` spawns each at host startup, runs the
+  `initialize` + `initialized` handshake against the workspace root URI, and registers four tools
+  per server: `lsp__{name}__{hover|definition|references|open}`. Required capability per call is a
+  `ProcessExecCap("lsp:{server}", …)` so a whole language server can be allow- or deny-ruled as a
+  unit (mirrors `McpToolAdapter`). Per-server failures are isolated — others still come up. The
+  adapter rejects paths whose extension isn't in the server's `fileExtensions`. Positions are
+  converted between the host's 1-based and LSP's 0-based at the adapter boundary.
+
 ### Added — Roslyn semantic actions
 
 - **`CSharpAnalysis` gains `find-references` / `find-definition` / `semantic-diagnostics`** — full
