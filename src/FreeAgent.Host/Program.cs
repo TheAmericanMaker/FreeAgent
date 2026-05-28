@@ -47,12 +47,14 @@ public static class Program
         var permissions = new PermissionEngine();
         var projectConfig = LoadProjectConfig(permissions, workingDir);
         var hookRunner = new HookRunner(projectConfig?.Hooks, new BashShellExecutor());
+        var artifactStore = new InMemoryArtifactStore();
         var pipeline = new ToolPipeline(
             registry,
             permissions,
             approver: new ConsoleApprover(workingDir),
             cache: new InMemoryToolResultCache(),
-            hooks: hookRunner);
+            hooks: hookRunner,
+            artifacts: artifactStore);
         var fs = new LinuxAtomicFileSystem();
         var store = new JsonlSessionStore(fs);
         var events = new ConsoleEventSink(options.Verbose);
@@ -69,6 +71,7 @@ public static class Program
         registry.Register(new ExitPlanModeTool());
         registry.Register(new ReadMemoryTool());
         registry.Register(new WriteMemoryTool());
+        registry.Register(new ReadArtifactTool(artifactStore));
 
         // Sub-agents — restricted-tool roles that the main agent can spawn for sub-tasks.
         var agents = new AgentRegistry();

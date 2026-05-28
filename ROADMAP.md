@@ -57,12 +57,13 @@ see below.)
   pairings and the user-first alternation), prepending a notice to the first kept user message.
   Remaining/next: **LLM-based summarization** of the dropped turns (replace the notice with a
   real summary).
-- [x] **Result cache (cache-lookup / cache-write / invalidate seams filled)** — done:
-  `IToolResultCache` + `InMemoryToolResultCache`; the pipeline serves read-only `Success`
-  results from cache, skips `execute` on a hit, never caches errors/`Empty`, and a successful
-  mutating tool invalidates the cache (conservative — full clear). Wired in the host by default.
-  Remaining: **artifact store** — offload large tool outputs to disk and return a reference to
-  the model (the `artifact-store` seam stays a no-op until then).
+- [x] **Result cache + artifact store** — all four `cache-lookup` / `cache-write` / `invalidate` /
+  `artifact-store` seams are now filled. **Cache:** `IToolResultCache` + `InMemoryToolResultCache`
+  serve read-only `Success` from cache, skip `execute` on hits, never cache errors/`Empty`, and a
+  successful mutating tool invalidates the cache. **Artifact store:** `IArtifactStore` +
+  `InMemoryArtifactStore`; `Success` content above a configurable threshold (default 10k chars) is
+  moved to the store and replaced with a preview + opaque ref, retrievable via the new `ReadArtifact`
+  tool. Wired in the host by default.
 - [x] **Hooks (pre/post-tool + SessionStart)** — `HookSpec` / `HookCondition` (tool name +
   inputContains) + `HooksConfig` (`preToolUse` / `postToolUse` / `sessionStart`) in
   `.freeagent/config.json`; `HookRunner` consults them at the existing `pre-hook` / `post-hook`
@@ -186,7 +187,7 @@ from the current per-turn `MaxIterations`) would be a separate counter if ever a
 - [x] Native Anthropic Messages-API streaming provider (text / thinking / tool-use, cache-aware normalized `Usage`) + `FREEPROVIDER` selection with per-provider config sections
 - [x] Context-window safety net — token tracking + pre-turn turn-aware compaction (no LLM summary yet)
 - [x] `EditFile` tool — safe in-place string-replace editing (unique-match by default)
-- [x] Result cache — read-only `Success` cached, mutating tools invalidate (`cache-lookup` / `cache-write` / `invalidate` seams filled)
+- [x] Result cache + artifact store — all four cache/artifact pipeline seams filled; `ReadArtifact` tool retrieves offloaded content
 - [x] File history + `/undo` — per-write snapshots in `SessionState.History`, restored or deleted by `HostCommands.Undo`
 - [x] Cross-session memory — `ReadMemoryTool` / `WriteMemoryTool` (filesystem-backed, XDG-aware)
 - [x] System-prompt assembly — base + working dir + git branch (from `.git/HEAD`) + project context file (`CLAUDE.md` / `AGENTS.md` / `FREEAGENT.md`)

@@ -12,11 +12,16 @@ namespace FreeAgent.Kernel;
 /// </summary>
 public sealed class ToolPipeline
 {
+    /// <summary>Default character threshold above which a Success result is offloaded to the artifact store.</summary>
+    public const int DefaultArtifactThreshold = 10_000;
+
     private readonly IToolRegistry _registry;
     private readonly IPermissionEngine _permissions;
     private readonly IPermissionApprover? _approver;
     private readonly IToolResultCache? _cache;
     private readonly IHookRunner? _hooks;
+    private readonly IArtifactStore? _artifacts;
+    private readonly int _artifactThreshold;
     private readonly object _stepLogGate = new();
 
     /// <summary>Ordered record of the conceptual steps reached during the last call(s).</summary>
@@ -33,18 +38,25 @@ public sealed class ToolPipeline
     /// cache, the pipeline behaves as before.
     /// </param>
     /// <param name="hooks">Optional pre/post-tool hook runner. With no runner, the hook seams stay no-ops.</param>
+    /// <param name="artifacts">Optional artifact store. When supplied, Success results whose content is
+    /// longer than <paramref name="artifactThreshold"/> are stored there and replaced with a short
+    /// preview + opaque reference so the model doesn't carry the full content in its context.</param>
     public ToolPipeline(
         IToolRegistry registry,
         IPermissionEngine permissions,
         IPermissionApprover? approver = null,
         IToolResultCache? cache = null,
-        IHookRunner? hooks = null)
+        IHookRunner? hooks = null,
+        IArtifactStore? artifacts = null,
+        int artifactThreshold = DefaultArtifactThreshold)
     {
         _registry = registry;
         _permissions = permissions;
         _approver = approver;
         _cache = cache;
         _hooks = hooks;
+        _artifacts = artifacts;
+        _artifactThreshold = artifactThreshold;
     }
 
     public async ValueTask<ToolResult> ExecuteAsync(ToolCall call, SessionState state, CancellationToken cancellationToken)
@@ -158,8 +170,19 @@ public sealed class ToolPipeline
             if (_hooks is not null)
                 await _hooks.RunPostToolAsync(call.Name, call.ArgumentsJson, result, cancellationToken);
 
-            // Step 10 — artifact-store (large Success previews). Future seam.
+            // Step 10 — artifact-store: offload large Success content so the transcript stays small.
             AddStep("artifact-store");
+            if (_artifacts is not null
+                && result.Kind == ToolResultKind.Success
+                && result.Content.Length > _artifactThreshold)
+            {
+                var reference = _artifacts.Store(result.Content);
+                var previewLength = Math.Min(500, result.Content.Length);
+                var preview = result.Content[..previewLength];
+                result = ToolResult.Success(
+                    $"[Large output ({result.Content.Length} chars) saved as artifact `{reference}`. "
+                    + $"Call `ReadArtifact` with ref=\"{reference}\" to fetch the full text. Preview:]\n{preview}…");
+            }
 
             // Step 11 — cache-write: only Success on a read-only tool (skip errors and Empty).
             AddStep("cache-write");

@@ -65,6 +65,11 @@ All notable changes to FreeAgent are recorded here. The format follows
 
 ### Added — robustness
 
+- **Artifact store** — fills the pipeline's `artifact-store` seam. `Success` content above a
+  configurable threshold (default 10k chars) is moved into `IArtifactStore` and the result content
+  is replaced with `[Large output (N chars) saved as artifact \`ref\`. Preview: ...]`; the model
+  retrieves the full text via the new `ReadArtifact` tool. Default `InMemoryArtifactStore`; wired
+  in the host by default.
 - **Result cache** — fills the pipeline's `cache-lookup` / `cache-write` / `invalidate` seams.
   Read-only tool `Success` results are cached by `(toolName, canonicalised-arguments)`; a hit
   short-circuits before `execute`; a successful mutating tool drops every cached entry (conservative
