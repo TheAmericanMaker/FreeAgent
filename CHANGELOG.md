@@ -6,6 +6,17 @@ All notable changes to FreeAgent are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added — workspace file watching
+
+- **`WorkspaceFileWatcher`** — opt-in (`FREE_WATCH_FILES=1`) watcher that surfaces externally
+  changed files between turns. Wraps `FileSystemWatcher` with a deduplicated change set,
+  noise-directory filtering (`.git` / `node_modules` / `bin` / `obj` / `.vs` / `.idea`), and an
+  enlarged internal buffer (64 KB) so heavy bursts don't get dropped. Between turns the host
+  drains the watcher and, if any files changed, prepends a notice
+  (`[freeagent] Files changed externally since the last turn: …`) to the user's input — capped at
+  10 paths with an "…(N more)" summary. Off by default because inotify usage on a large monorepo
+  can hit kernel limits; flip it on per session.
+
 ### Added — local model runner
 
 - **`ModelServerLauncher` + `/serve`** — spawn / stop / inspect a local OpenAI-compat inference

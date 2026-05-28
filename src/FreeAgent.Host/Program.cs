@@ -120,6 +120,16 @@ public static class Program
         if (int.TryParse(Environment.GetEnvironmentVariable("FREE_SESSION_ITERATIONS"), out var sit) && sit > 0)
             state.SessionIterationLimit = sit;
 
+        // Optional workspace file watcher — opt-in via FREE_WATCH_FILES=1. When enabled, external
+        // edits made between turns are surfaced to the model as a "files changed" notice prepended
+        // to the next user turn.
+        WorkspaceFileWatcher? fileWatcher = null;
+        if (Environment.GetEnvironmentVariable("FREE_WATCH_FILES") is "1" or "true")
+        {
+            try { fileWatcher = new WorkspaceFileWatcher(workingDir); }
+            catch (Exception ex) { Console.Error.WriteLine($"[freeagent] file watcher disabled: {ex.Message}"); }
+        }
+
         // SessionStart hooks run once per session (after state creation, before the first turn).
         await hookRunner.RunSessionStartAsync(state, default);
 
@@ -191,6 +201,16 @@ public static class Program
                 }
             }
 
+            // Prepend a "files changed externally" notice when the watcher saw any edits since the
+            // last turn. The model sees the notice as part of the user turn, so the next response
+            // can address the new state of the workspace.
+            if (fileWatcher is not null)
+            {
+                var changes = fileWatcher.Drain();
+                if (WorkspaceFileWatcher.RenderNotice(changes) is { } notice)
+                    input = notice + "\n\n" + input;
+            }
+
             turnCts = new CancellationTokenSource();
             try
             {
@@ -217,6 +237,7 @@ public static class Program
             }
         }
 
+        fileWatcher?.Dispose();
         await store.SaveAsync(state, default);
         Console.WriteLine("\nSession saved. Goodbye.");
     }

@@ -173,10 +173,12 @@ Phasing (the kernel is *already* effectively headless — `SessionRuntime` + `IE
   not separate integrations.
 - [ ] **Misc** — **session tagging** (`/tag` / `/untag` + visible in `/status`), **whole-session
   iteration limit** (env `FREE_SESSION_ITERATIONS`, in addition to the per-turn `MaxIterations=90`),
-  and **opt-in OpenTelemetry tracing** (the kernel exposes `SessionRuntime.ActivitySource` and
-  `ToolPipeline.ActivitySource`; attach any `ActivityListener` / OTel SDK to consume) done.
-  Remaining: **session forking** (clone state to a new id), **file watching** during a session,
-  **extended-thinking + token-budget controls**.
+  **opt-in OpenTelemetry tracing** (the kernel exposes `SessionRuntime.ActivitySource` and
+  `ToolPipeline.ActivitySource`; attach any `ActivityListener` / OTel SDK to consume), and
+  **file watching** (`WorkspaceFileWatcher`, opt-in via `FREE_WATCH_FILES=1`; surfaces externally
+  changed files as a notice prepended to the next user turn — deduped, sorted, noise-dir filtered,
+  capped to 10 visible with overflow summary) done. Remaining: **session forking** (clone state
+  to a new id), **extended-thinking + token-budget controls**.
 
 ## Deliberately deferred
 
