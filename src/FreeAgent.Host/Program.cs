@@ -54,6 +54,7 @@ public static class Program
         // Register real tool adapters
         registry.Register(new ReadFileTool());
         registry.Register(new WriteFileTool());
+        registry.Register(new EditFileTool());
         registry.Register(new ProcessExecTool());
         registry.Register(new GlobTool());
         registry.Register(new GrepTool());

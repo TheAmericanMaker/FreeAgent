@@ -65,7 +65,9 @@ see below.)
 - [ ] **Sub-agents** — spawn isolated sessions with restricted tool sets
   (`AgentSpawnCap` is already modeled); start with `Explore` / `Plan` / `Coder` /
   `Verify` roles.
-- [ ] **Richer editing tools** — MultiEdit, ApplyPatch, and a colored diff view for writes.
+- [x] **Richer editing tools** — `EditFile` (literal string-replace with unique-match safety;
+  `replace_all` opt-in) done. Remaining: **MultiEdit** (atomic batch of edits per file),
+  **ApplyPatch** (unified diff), **colored diff view** for writes.
 - [ ] **System-prompt assembly** — base instructions + a project file (e.g. `CLAUDE.md`)
   + git branch/status + cross-session memory.
 - [ ] **Cross-session memory** — `MemoryCap` is modeled; add a memory store and a
@@ -166,3 +168,4 @@ from the current per-turn `MaxIterations`) would be a separate counter if ever a
 - [x] `/help`, `/status`, `/model` slash commands (in addition to `/plan`)
 - [x] Native Anthropic Messages-API streaming provider (text / thinking / tool-use, cache-aware normalized `Usage`) + `FREEPROVIDER` selection with per-provider config sections
 - [x] Context-window safety net — token tracking + pre-turn turn-aware compaction (no LLM summary yet)
+- [x] `EditFile` tool — safe in-place string-replace editing (unique-match by default)

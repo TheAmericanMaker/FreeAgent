@@ -6,6 +6,13 @@ All notable changes to FreeAgent are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added — editing
+
+- **`EditFile` tool** — in-place file edit by literal string-replace, with a unique-match safety
+  by default (precise edits) and an opt-in `replace_all`. Use this rather than `WriteFile` for
+  changes to existing files: it preserves untouched content and is far cheaper in tokens. Required
+  capability: `FileWriteCap` on the resolved path.
+
 ### Added — robustness
 
 - **Context-window compaction** — `SessionState` tracks `LastInputTokens` (from `Usage`) and a
