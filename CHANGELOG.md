@@ -6,6 +6,14 @@ All notable changes to FreeAgent are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added — agent UX
+
+- **Interactive permission approval** — the engine now distinguishes a hard deny from an
+  approvable `Prompt` (uncovered capability); the pipeline consults an optional `IPermissionApprover`
+  on `Prompt`, with "allow for session" grants tracked in `SessionState.SessionApprovals`. The host's
+  `ConsoleApprover` prompts `[once / session / always / deny]`, where "always" persists a rule to
+  `.freeagent/config.json`. With no approver the kernel stays deterministic (prompt = deny).
+
 ### Added — packaging & distribution
 
 - **Global tool** — `FreeAgent.Host` packs as a .NET tool (`dotnet tool install -g FreeAgent`),

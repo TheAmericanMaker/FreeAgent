@@ -39,7 +39,7 @@ public static class Program
         var registry = new ToolRegistry();
         var permissions = new PermissionEngine();
         LoadPermissionConfig(permissions, workingDir);
-        var pipeline = new ToolPipeline(registry, permissions);
+        var pipeline = new ToolPipeline(registry, permissions, new ConsoleApprover(workingDir));
         var fs = new LinuxAtomicFileSystem();
         var store = new JsonlSessionStore(fs);
         var events = new ConsoleEventSink(options.Verbose);

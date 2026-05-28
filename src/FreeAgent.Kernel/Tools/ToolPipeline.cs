@@ -14,15 +14,22 @@ public sealed class ToolPipeline
 {
     private readonly IToolRegistry _registry;
     private readonly IPermissionEngine _permissions;
+    private readonly IPermissionApprover? _approver;
     private readonly object _stepLogGate = new();
 
     /// <summary>Ordered record of the conceptual steps reached during the last call(s).</summary>
     public List<string> StepLog { get; } = [];
 
-    public ToolPipeline(IToolRegistry registry, IPermissionEngine permissions)
+    /// <param name="approver">
+    /// Optional interactive approver consulted when the engine returns
+    /// <see cref="PermissionOutcome.Prompt"/>. When null, a prompt is treated as a denial — the
+    /// deterministic, non-interactive default.
+    /// </param>
+    public ToolPipeline(IToolRegistry registry, IPermissionEngine permissions, IPermissionApprover? approver = null)
     {
         _registry = registry;
         _permissions = permissions;
+        _approver = approver;
     }
 
     public async ValueTask<ToolResult> ExecuteAsync(ToolCall call, SessionState state, CancellationToken cancellationToken)
@@ -78,7 +85,13 @@ public sealed class ToolPipeline
             AddStep("permission");
             var capabilities = tool.RequiredCapabilities(arguments, context);
             var decision = _permissions.Decide(tool, capabilities, state.WorkingDirectory);
-            if (!decision.Allowed)
+            if (decision.Outcome == PermissionOutcome.Deny)
+            {
+                return ToolResult.PermissionDenied(decision.Reason, decision.RetryHint);
+            }
+
+            if (decision.Outcome == PermissionOutcome.Prompt
+                && !await IsApprovedAsync(tool, capabilities, state, cancellationToken))
             {
                 return ToolResult.PermissionDenied(decision.Reason, decision.RetryHint);
             }
@@ -128,6 +141,43 @@ public sealed class ToolPipeline
             }
 
             return result;
+        }
+    }
+
+    /// <summary>
+    /// Resolves an uncovered (<see cref="PermissionOutcome.Prompt"/>) capability set: honours an
+    /// existing session grant, otherwise asks the approver. An "allow for session" choice is
+    /// recorded per capability type in <see cref="SessionState.SessionApprovals"/>. With no approver
+    /// the answer is no, so the call is denied.
+    /// </summary>
+    private async ValueTask<bool> IsApprovedAsync(
+        ITool tool, IReadOnlyList<Capability> capabilities, SessionState state, CancellationToken cancellationToken)
+    {
+        if (capabilities.Count > 0 && capabilities.All(c => state.SessionApprovals.Contains(c.GetType().Name)))
+        {
+            return true;
+        }
+
+        if (_approver is null)
+        {
+            return false;
+        }
+
+        var decision = await _approver.RequestAsync(
+            new ApprovalRequest(tool.Name, capabilities, $"{tool.Name} requires approval"), cancellationToken);
+
+        switch (decision)
+        {
+            case ApprovalDecision.Session:
+                foreach (var capability in capabilities)
+                {
+                    state.SessionApprovals.Add(capability.GetType().Name);
+                }
+                return true;
+            case ApprovalDecision.Once:
+                return true;
+            default:
+                return false;
         }
     }
 

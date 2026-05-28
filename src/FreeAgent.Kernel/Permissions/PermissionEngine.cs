@@ -121,9 +121,9 @@ public sealed class PermissionEngine : IPermissionEngine
             if (MatchesAny(_allowRules, capability)) continue;
             if (IsAutoAllowed(capability, workingDirectory)) continue;
 
-            return PermissionDecision.Deny(
-                $"Capability requires approval: {capability.Describe()}. No auto-allow rule matched.",
-                retryHint: "A UX layer must prompt the user to approve this capability, or add an allow rule.");
+            return PermissionDecision.Prompt(
+                $"Requires approval: {capability.Describe()}.",
+                retryHint: "Not approved. The user can approve it interactively, or add an allow rule to .freeagent/config.json.");
         }
 
         // 7. All capabilities covered.

@@ -18,7 +18,7 @@ Mostly small, because the design already has the hook. Generally more pressing t
 the larger ported features further down. (The first daily-driver batch is now done —
 see below.)
 
-- [ ] **Interactive permission approval** — today an uncovered capability is denied with
+- [x] **Interactive permission approval** — today an uncovered capability is denied with
   no way to approve it live, so the only approval channel is hand-writing
   `.freeagent/config.json` (and the model tends to hallucinate an approval UI that isn't
   there). Intercept the engine's "needs approval" denial in the host and prompt

@@ -20,4 +20,11 @@ public sealed class SessionState
     /// the EnterPlanMode / ExitPlanMode tools. Defaults to false. In-memory only; not persisted.
     /// </summary>
     public bool PlanMode { get; set; }
+
+    /// <summary>
+    /// Capability type names the user approved "for this session" via an interactive prompt. The
+    /// pipeline checks this before prompting again, so an approved capability type runs unattended
+    /// for the rest of the session. In-memory only; not persisted.
+    /// </summary>
+    public HashSet<string> SessionApprovals { get; } = new(StringComparer.Ordinal);
 }
