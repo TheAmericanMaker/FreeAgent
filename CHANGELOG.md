@@ -6,6 +6,34 @@ All notable changes to FreeAgent are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added — packaging & distribution
+
+- **Global tool** — `FreeAgent.Host` packs as a .NET tool (`dotnet tool install -g FreeAgent`),
+  exposing a single `freeagent` command that runs in the current directory. `scripts/install.sh`
+  builds and installs/updates it from a local checkout.
+- **`--help` / `--version`** flags.
+- **User-level provider config** — `ProviderConfig` reads `~/.config/freeagent/config.json`
+  (XDG-aware) for `baseUrl` / `model` / `apiKey`, with precedence env > file > default, so the bare
+  command works without exporting env vars.
+- **Release workflow** — `.github/workflows/release.yml` builds/tests on `v*` tags, packs the tool,
+  publishes to NuGet when `NUGET_API_KEY` is set, and attaches self-contained binaries
+  (linux-x64 / osx-arm64 / win-x64) to the GitHub Release.
+
+### Added — daily-driver usability milestone
+
+- **Tool descriptions** — `ITool.Description`, threaded through `ToolDefinition` and sent
+  to the provider as the function description for reliable tool selection.
+- **`Glob` and `Grep` tools** — read-only, concurrency-safe, managed (no `rg` dependency),
+  workspace-scoped via `FileReadCap`, with deterministic noise-dir-skipping walks and capped
+  output.
+- **Plan-mode toggle** — `EnterPlanMode` / `ExitPlanMode` tools (read-only) plus a `/plan
+  [on|off]` host command.
+- **Config-driven permissions** — `PermissionConfig` loads allow/deny rules from
+  `$FREEAGENT_CONFIG` or `.freeagent/config.json` and applies them to the engine (missing is
+  fine, malformed is a non-fatal warning).
+- **Session resume** — `--resume [id]` rehydrates `session.jsonl` and continues that session;
+  falls back to a fresh session on any problem.
+
 ### Added
 
 - **`FreeAgent.Host` interactive CLI** — env-configured (`OPENAI_API_KEY`,

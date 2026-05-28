@@ -69,11 +69,20 @@ export FREEMODEL=some/model
 ```
 
 - The model's text streams as it arrives.
-- It may call `ReadFile`, `WriteFile`, or `ProcessExec`; allowed calls run and their
-  results feed back into the same turn automatically.
+- It may call tools — `ReadFile`, `WriteFile`, `ProcessExec`, `Glob`, `Grep`, or the
+  plan-mode toggles; allowed calls run and their results feed back into the same turn
+  automatically.
 - **Ctrl+C** cancels the in-progress turn and returns you to the prompt — it does
   *not* kill the process while a turn is running.
 - `exit`, `quit`, or end-of-input ends the session.
+
+### Commands
+
+Input starting with `/` is a host command (not sent to the model):
+
+- `/plan` — toggle plan mode; `/plan on` / `/plan off` set it explicitly. In plan mode
+  only read-only tools run, so the agent can explore and propose changes without making
+  any. The model can also toggle this itself via the `EnterPlanMode` / `ExitPlanMode` tools.
 
 ### Verbose mode
 
@@ -110,17 +119,39 @@ The permission engine decides every tool call. In the default host configuration
 A denied call comes back to the model as a `PermissionDenied` result (often with a
 retry hint), so the model can adjust rather than crash.
 
-> The current host registers tools and the permission engine with defaults and does
-> not yet expose flags to add allow rules at startup. Granting writes or extra
-> binaries is done in code via `PermissionEngine.AllowTool` /
-> `AllowCapabilityRule<T>(pattern)` when composing the runtime — a natural next host
-> feature. See [`architecture.md`](architecture.md#permission-engine-permissionengine).
+### Granting more with a config file
+
+Drop a `.freeagent/config.json` in the working directory (or point `FREEAGENT_CONFIG`
+at a file) to add allow/deny rules without code. A capability rule with no `pattern`
+(or `"*"`) covers the whole capability type; otherwise the `pattern` is a glob matched
+against the capability's target (path, binary, …). Hardcoded blocks above still win.
+
+```jsonc
+{
+  "allow": [
+    { "capability": "FileWriteCap", "pattern": "**" },   // write anywhere in the workspace
+    { "capability": "ProcessExecCap", "pattern": "npm" }  // run npm
+  ],
+  "deny": [ { "capability": "ProcessExecCap", "pattern": "rm" } ],
+  "allowTools": [],
+  "denyTools": []
+}
+```
+
+Valid capability names: `FileReadCap`, `FileWriteCap`, `ProcessExecCap`,
+`NetworkEgressCap`, `VcsMutationCap`, `MemoryCap`, `AgentSpawnCap`. A missing config is
+fine; a malformed one prints a warning and is ignored.
 
 ## Sessions and transcripts
 
 Each run starts a **fresh** session with a new id and writes `session.jsonl` to the
 working directory, saving after every completed turn and again on exit. The file is
 JSONL: line 1 is the header, each later line is one message.
+
+Pass **`--resume`** to continue the session in `session.jsonl` (its id and full message
+history are restored), or **`--resume <id>`** to resume only if the stored id matches.
+If there's nothing to resume (missing file, id mismatch, or a malformed transcript) the
+host prints a note and starts fresh.
 
 ```bash
 # Inspect the last session
@@ -131,8 +162,8 @@ head -n1 session.jsonl
 ```
 
 Writes are atomic (write-temp → fsync → rename → fsync-dir), so an interrupted run
-never leaves a corrupt transcript. The kernel's `JsonlSessionStore` can *load* a
-session back into `SessionState`, though the host does not yet offer a resume flag.
+never leaves a corrupt transcript. The host rehydrates this file on `--resume` via the
+kernel's `JsonlSessionStore`.
 
 ## Exit codes
 

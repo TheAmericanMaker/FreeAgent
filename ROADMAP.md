@@ -15,27 +15,44 @@ the core."
 ## Near-term — wire up what the kernel already models
 
 Mostly small, because the design already has the hook. Generally more pressing than
-the larger ported features further down.
+the larger ported features further down. (The first daily-driver batch is now done —
+see below.)
 
-- [ ] **Tool `Description` field** — `ToolDefinition` carries no description, so the
-  provider sends tools name-only; add descriptions for reliable tool selection.
-- [ ] **Plan-mode toggle** — `SessionState.PlanMode` and the pipeline guard exist, but
-  nothing flips the flag; add `EnterPlanMode`/`ExitPlanMode` tools and a `/plan` command.
-- [ ] **Permission rules from config** — the engine supports allow/deny tool and
-  capability rules; the host wires none. Load them from a config file and/or flags so
-  writes and extra binaries can be granted without code changes.
-- [ ] **Session resume** — `JsonlSessionStore.LoadAsync` already works; add a host
-  `--resume <id>` path.
-- [ ] **Glob / Grep read-only tools** — round out discovery. Both can be read-only +
-  concurrency-safe, so they parallelize for free under the existing execution contract.
+- [ ] **Interactive permission approval** — today an uncovered capability is denied with
+  no way to approve it live, so the only approval channel is hand-writing
+  `.freeagent/config.json` (and the model tends to hallucinate an approval UI that isn't
+  there). Intercept the engine's "needs approval" denial in the host and prompt
+  `[allow once / session / always→write a rule / deny]`; carry session grants in
+  `SessionState`; tighten the denial text. The kernel already returns a clean,
+  distinct denial for exactly this. **Highest-impact near-term item — it currently blocks
+  real edits.**
+- [ ] **Minimal system prompt (user-editable)** — FreeAgent injects *no* system prompt today, so
+  the model is ungrounded (it narrates, and invents an approval UI that doesn't exist). Add a
+  built-in default telling the model what it is, the working directory, the tools available, and how
+  the host actually behaves (denied = denied; be concise), loaded from a **user-editable file**
+  (`~/.config/freeagent/system.md`, with an optional project-level `.freeagent/system.md` override)
+  so it can be customized. The fuller **System-prompt assembly** below (project file + git status +
+  memory) layers on top later.
 - [ ] **Local-server providers** — Ollama already works via
-  `OPENAI_BASE_URL=http://localhost:11434/v1`; document recipes for Ollama / llama.cpp /
-  vLLM, and consider a native Ollama provider for its non-OpenAI features.
+  `OPENAI_BASE_URL=http://localhost:11434/v1`; consider a native Ollama provider for its
+  non-OpenAI features (a recipe is in `docs/usage.md`).
+- [ ] **More slash commands** — `/status`, `/model`, `/help` alongside the existing `/plan`
+  (the host command dispatch is in place). Feature-specific commands (`/compact`, `/undo`,
+  `/commit`, …) arrive with their backing features below, and a `ctrl+p` command palette
+  eventually supersedes slash-commands in the TUI (see On the horizon).
 
 ## Coming next — larger features
 
-- [ ] **More providers** — native Anthropic (Messages API), plus Azure OpenAI, Bedrock,
-  Vertex, and Groq behind the existing `IProvider` seam.
+- [ ] **More providers + provider-model hardening** — native Anthropic (Messages API), plus
+  Azure OpenAI, Bedrock, Vertex, and Groq behind the existing `IProvider` seam. The single
+  `StreamChatAsync` seam is the right shape (pi-mono uses essentially one streaming method too),
+  but to make "add any provider anytime, no core change" real, add the scaffolding around it that
+  pi-mono has: a first-class **`Model` metadata record** (id / wire-API / baseUrl / context window /
+  max tokens / cost / reasoning) on `ProviderRequest`; **normalized `Usage`** (cache read/write,
+  total, cost) not just raw tokens; **per-model compat flags** to absorb OpenAI-compatible variants
+  without forking the adapter; typed **request options** + a provider-agnostic **`StopReason`**; and a
+  provider **registry keyed by wire-API** (`openai-completions`, `anthropic-messages`, …) rather than
+  by vendor, with a separate model registry.
 - [ ] **Context-window management** — token tracking, checkpointing, and compaction so
   long sessions don't overrun the window (FreeAgent has none today).
 - [ ] **Result cache + artifact store** — fill the `cache-lookup` / `cache-write` /
@@ -51,10 +68,25 @@ the larger ported features further down.
   + git branch/status + cross-session memory.
 - [ ] **Cross-session memory** — `MemoryCap` is modeled; add a memory store and a
   read/write tool.
-- [ ] **Slash commands** — `/help`, `/status`, `/model`, `/compact`, `/commit`,
-  `/review`, `/doctor`, `/undo`.
 - [ ] **File history & undo** — per-write snapshots, a `/undo`, and session revert to a
   prior turn.
+
+## Architecture direction — decided (see [ADR 0005](docs/decisions/0005-headless-core-protocol.md))
+
+**Target: headless core + protocol, with pluggable frontends.** The C# kernel exposes a server
+(an HTTP API described by an OpenAPI spec + an SSE event stream); the TUI, a web frontend, editors
+(via ACP), and remote access are all **clients of that one protocol** — the opencode pattern (a
+client can `attach` to a local *or* remote server and holds zero agent logic). This is what makes
+the opencode-grade Bun/opentui TUI reachable from a C# core.
+
+Phasing (the kernel is *already* effectively headless — `SessionRuntime` + `IEventSink`):
+
+- [ ] Keep building near-term/coming-next features **in-process** for now; just keep
+  `SessionRuntime` / `IEventSink` / input frontend-agnostic so the seam stays clean.
+- [ ] **Protocol server** — add a server project hosting `SessionRuntime`, bridging `IEventSink`
+  and input to HTTP + SSE, emitting an OpenAPI spec (additive — not a kernel rewrite).
+- [ ] First protocol **frontend** — a Bun/opentui TUI client (opencode-style). The existing
+  console host remains as the minimal built-in/fallback client.
 
 ## On the horizon — integrations & ecosystem
 
@@ -64,13 +96,38 @@ the larger ported features further down.
   `diagnostics`.
 - [ ] **Roslyn tool** — C# semantic analysis (overview, find-references, callers,
   blast-radius), relevant since FreeAgent itself is C#.
-- [ ] **Full-screen TUI** — a richer renderer alongside the current console `IEventSink`.
-- [ ] **Local inference orchestration** — an optional Docker wrapper that launches and
-  manages a llama.cpp (or similar) server, mirroring OpenMono's bundled-server model.
-- [ ] **Vision / multimodal input** — image inputs within a turn.
+- [ ] **TUI (protocol client, opencode-style)** — per ADR 0005, the full-screen TUI is a
+  **frontend client over the protocol**, not embedded in the host: a Bun/SolidJS app using
+  **opentui** (the stack opencode uses) attached to the headless core. opentui is Zig + C-ABI +
+  TypeScript and is *not* a .NET drop-in, which is exactly why the frontend is a separate Bun
+  process talking the protocol rather than embedded. (A native .NET TUI — `Spectre.Console` /
+  `Terminal.Gui` — was the in-process alternative; kept only as a possible minimal fallback
+  renderer.)
+- [ ] **Command palette** — a `ctrl+p` fuzzy command palette backed by a command registry, the
+  opencode model: named, dispatchable commands with metadata that feed both keybindings and the
+  palette. Supersedes ad-hoc slash-commands (the host already has a command-dispatch seam).
+- [ ] **Status line repositioning** — move the `Session | Model | working dir` line from the top
+  to a persistent bottom status bar, with rule lines above and below the input box. *Presentation
+  only; lands as part of the TUI client (above) — the current console host keeps the top line.*
+- [ ] **Local model runner (orchestrate, don't embed)** — since every local engine already speaks
+  OpenAI-compatible HTTP (llama.cpp's `llama-server`, Ollama, LocalAI, vLLM, exo, LM Studio),
+  FreeAgent should **download a model + launch/health-check a local server + point its existing
+  provider at it** — not embed a C++/LLamaSharp engine in-process. Default to the light single-binary
+  engines (Ollama or `llama-server`, which can fetch GGUF itself); architecture-neutral, stays pure
+  .NET. What FreeAgent builds: server lifecycle (spawn/health-check/shutdown, port mgmt), a model
+  download/catalog UX, and config mapping. *Pointing at an already-running server is config-only
+  today (see `docs/usage.md`); this item is about owning the download + launch.* exo (distributed,
+  Apple-Silicon/MLX) stays **docs-only** — point at it if you run it.
+- [ ] **Multimodal — far future.** Image gen / speech-to-text / text-to-speech are *not* a near-term
+  goal and stay text/coding-focused for now. When wanted, reach them the same way as LLMs: via a
+  multimodal local server (e.g. **LocalAI**, which already exposes image/STT/TTS behind one
+  OpenAI-compatible API) behind the existing provider — **not** by embedding native engines
+  (whisper.cpp / piper / SD). Lone in-process exception worth noting: `whisper.net` (MIT, mature .NET
+  binding) if voice input ever becomes a real ask.
 - [ ] **Playbooks** — templated, parameterized workflows.
 - [ ] **Editor & remote** — VS Code extension, ACP (Zed), desktop wrapper, web frontend,
-  Slack / GitHub apps.
+  Slack / GitHub apps. Per ADR 0005 these are all just additional **clients of the one protocol**,
+  not separate integrations.
 - [ ] **Misc** — extended thinking + token budgets, session tagging/forking, file
   watching during a session, opt-in OpenTelemetry tracing.
 
@@ -91,3 +148,11 @@ from the current per-turn `MaxIterations`) would be a separate counter if ever a
 - [x] Real tool adapters — `ReadFile`, `WriteFile`, `ProcessExec`
 - [x] Plan-mode guard in the pipeline
 - [x] Interactive host CLI (REPL, env config, per-turn Ctrl+C)
+
+### Daily-driver usability milestone
+
+- [x] Tool `Description` field wired through `ITool` / `ToolDefinition` / the OpenAI request
+- [x] `Glob` and `Grep` read-only search tools (managed, workspace-scoped, capped)
+- [x] Plan-mode toggle — `EnterPlanMode` / `ExitPlanMode` tools and a `/plan` host command
+- [x] Config-driven permission rules (`PermissionConfig`, `.freeagent/config.json`)
+- [x] Session resume — host `--resume [id]`

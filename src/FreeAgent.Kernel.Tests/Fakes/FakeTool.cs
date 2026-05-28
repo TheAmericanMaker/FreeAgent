@@ -14,14 +14,16 @@ public sealed class FakeTool : ITool
         bool isReadOnly = false,
         bool isConcurrencySafe = false,
         Func<JsonDocument, ToolContext, IReadOnlyList<Capability>>? capabilities = null,
-        string schemaJson = "{}")
+        string schemaJson = "{}",
+        string description = "")
         : this(
             name,
             (arguments, _, _) => ValueTask.FromResult(execute(arguments)),
             isReadOnly,
             isConcurrencySafe,
             capabilities,
-            schemaJson)
+            schemaJson,
+            description)
     {
     }
 
@@ -31,9 +33,11 @@ public sealed class FakeTool : ITool
         bool isReadOnly = false,
         bool isConcurrencySafe = false,
         Func<JsonDocument, ToolContext, IReadOnlyList<Capability>>? capabilities = null,
-        string schemaJson = "{}")
+        string schemaJson = "{}",
+        string description = "")
     {
         Name = name;
+        Description = description;
         _execute = execute;
         IsReadOnly = isReadOnly;
         IsConcurrencySafe = isConcurrencySafe;
@@ -42,6 +46,7 @@ public sealed class FakeTool : ITool
     }
 
     public string Name { get; }
+    public string Description { get; }
     public JsonDocument InputSchema { get; }
     public bool IsReadOnly { get; }
     public bool IsConcurrencySafe { get; }

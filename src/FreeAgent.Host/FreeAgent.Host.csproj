@@ -9,6 +9,26 @@
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
   </PropertyGroup>
 
+  <!-- Packaging as a .NET global tool: `dotnet tool install -g freeagent` exposes `freeagent`. -->
+  <PropertyGroup>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>freeagent</ToolCommandName>
+    <!-- NuGet IDs are global; if "FreeAgent" is taken on nuget.org, change this before publishing. -->
+    <PackageId>FreeAgent</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>James Sesler</Authors>
+    <Description>FreeAgent — a Linux-native, modular agent kernel and interactive CLI for tool-using LLMs over any OpenAI-compatible endpoint.</Description>
+    <PackageProjectUrl>https://github.com/TheAmericanMaker/FreeAgent</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/TheAmericanMaker/FreeAgent</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>llm;agent;cli;ai;openai;tools</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\FreeAgent.Kernel\FreeAgent.Kernel.csproj" />
   </ItemGroup>

@@ -14,5 +14,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\FreeAgent.Kernel\FreeAgent.Kernel.csproj" />
+    <ProjectReference Include="..\FreeAgent.Host\FreeAgent.Host.csproj" />
   </ItemGroup>
 </Project>

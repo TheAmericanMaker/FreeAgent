@@ -67,6 +67,25 @@ public sealed class JsonlSessionStoreTests
     }
 
     [Fact]
+    public async Task DeserializeRestoresLatestSessionWithoutKnowingItsId()
+    {
+        // Mirrors the host's `--resume` (no id) path: read the file and deserialize, recovering the
+        // id and messages without supplying the id up front.
+        var directory = Directory.CreateTempSubdirectory("freeagent-jsonl-");
+        var path = Path.Combine(directory.FullName, "session.jsonl");
+        var state = new SessionState("resume-me", directory.FullName, DateTimeOffset.Parse("2026-05-25T00:00:00Z"));
+        state.Messages.Add(new Message(MessageRole.User, "first"));
+        state.Messages.Add(new Message(MessageRole.Assistant, "reply"));
+        var store = new JsonlSessionStore(path: path);
+        await store.SaveAsync(state, CancellationToken.None);
+
+        var restored = await store.DeserializeAsync(await File.ReadAllTextAsync(path), CancellationToken.None);
+
+        restored.SessionId.Should().Be("resume-me");
+        restored.Messages.Select(m => m.Content).Should().Equal("first", "reply");
+    }
+
+    [Fact]
     public async Task LoadMissingFileThrowsClearException()
     {
         var directory = Directory.CreateTempSubdirectory("freeagent-jsonl-");

@@ -11,6 +11,10 @@ namespace FreeAgent.Kernel;
 public sealed class ReadFileTool : ITool
 {
     public string Name => "ReadFile";
+    public string Description =>
+        "Read a UTF-8 text file from the workspace and return its full contents. Use this to inspect "
+        + "source, config, or data files before editing or reasoning about them. Takes a 'path' "
+        + "(absolute, or relative to the working directory).";
     public bool IsReadOnly => true;
     public bool IsConcurrencySafe => true;
 
