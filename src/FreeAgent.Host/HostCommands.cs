@@ -63,6 +63,8 @@ public static class HostCommands
           /revert [N]      Drop the last N user turns from the transcript (default 1). Files are not reverted (use /undo).
           /tag <name>      Add a session tag (visible in /status and /doctor).
           /untag <name>    Remove a session tag.
+          /run <name> ...  Run a playbook (.md files in .freeagent/playbooks / ~/.config/freeagent/playbooks).
+                           Positional args become {{arg1}}, {{arg2}}, … Bare `/run` lists available.
           /doctor          Print a one-shot configuration + health snapshot.
           exit | quit      End the session (also Ctrl+D / EOF).
           Ctrl+C           Cancel the current turn without quitting.

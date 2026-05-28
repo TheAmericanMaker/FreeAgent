@@ -157,8 +157,32 @@ public static class Program
 
             if (input.StartsWith('/'))
             {
-                HostCommands.Handle(input, state, model, diagnostics);
-                continue;
+                // /run <playbook> [args] expands into a normal user message and falls through.
+                if (input.StartsWith("/run ", StringComparison.Ordinal) || input == "/run")
+                {
+                    var playbooks = Playbooks.LoadAll(workingDir);
+                    var tokens = input.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                    if (tokens.Length < 2)
+                    {
+                        Console.WriteLine(playbooks.Count == 0
+                            ? "No playbooks found in .freeagent/playbooks or ~/.config/freeagent/playbooks."
+                            : $"Available playbooks: {string.Join(", ", playbooks.Keys.OrderBy(n => n, StringComparer.Ordinal))}");
+                        continue;
+                    }
+                    var rendered = Playbooks.Render(playbooks, tokens[1], tokens.Skip(2).ToArray());
+                    if (rendered is null)
+                    {
+                        Console.WriteLine($"No playbook '{tokens[1]}'. Available: {string.Join(", ", playbooks.Keys.OrderBy(n => n, StringComparer.Ordinal))}");
+                        continue;
+                    }
+                    Console.WriteLine($"[Running playbook '{tokens[1]}']");
+                    input = rendered; // fall through to the normal turn dispatch
+                }
+                else
+                {
+                    HostCommands.Handle(input, state, model, diagnostics);
+                    continue;
+                }
             }
 
             turnCts = new CancellationTokenSource();

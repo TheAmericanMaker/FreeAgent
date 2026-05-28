@@ -149,7 +149,10 @@ Phasing (the kernel is *already* effectively headless — `SessionRuntime` + `IE
   OpenAI-compatible API) behind the existing provider — **not** by embedding native engines
   (whisper.cpp / piper / SD). Lone in-process exception worth noting: `whisper.net` (MIT, mature .NET
   binding) if voice input ever becomes a real ask.
-- [ ] **Playbooks** — templated, parameterized workflows.
+- [x] **Playbooks** — templated, parameterized prompt shortcuts. Markdown files in
+  `.freeagent/playbooks/` (project) or `~/.config/freeagent/playbooks/` (user); positional
+  `{{arg1}}…{{argN}}` substitution. Invoked at the prompt with `/run <name> [args]`; bare `/run`
+  lists what's available.
 - [ ] **Editor & remote** — VS Code extension, ACP (Zed), desktop wrapper, web frontend,
   Slack / GitHub apps. Per ADR 0005 these are all just additional **clients of the one protocol**,
   not separate integrations.
