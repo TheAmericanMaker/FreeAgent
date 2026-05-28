@@ -68,6 +68,29 @@ public static class Program
         registry.Register(new ReadMemoryTool());
         registry.Register(new WriteMemoryTool());
 
+        // Sub-agents — restricted-tool roles that the main agent can spawn for sub-tasks.
+        var agents = new AgentRegistry();
+        agents.Register(new AgentDefinition(
+            "Explore",
+            ["ReadFile", "Glob", "Grep", "ReadMemory"],
+            "You are an Explore sub-agent. You may only read and search the workspace; report what you find concisely."));
+        agents.Register(new AgentDefinition(
+            "Plan",
+            ["ReadFile", "Glob", "Grep", "ReadMemory", "EnterPlanMode", "ExitPlanMode"],
+            "You are a Plan sub-agent. Investigate the task and produce a step-by-step plan. Do not make changes."));
+        agents.Register(new AgentDefinition(
+            "Coder",
+            ["ReadFile", "WriteFile", "EditFile", "Glob", "Grep", "ProcessExec", "ReadMemory", "WriteMemory", "EnterPlanMode", "ExitPlanMode"],
+            "You are a Coder sub-agent. Implement the task with minimal, correct changes; verify when practical."));
+        agents.Register(new AgentDefinition(
+            "Verify",
+            ["ReadFile", "Glob", "Grep", "ProcessExec", "ReadMemory"],
+            "You are a Verify sub-agent. Run tests, lints, and other verifications; report findings concisely."));
+        var subAgentRunner = new SubAgentRunner(
+            provider, registry, permissions, agents,
+            approver: new ConsoleApprover(workingDir));
+        registry.Register(new SpawnAgentTool(subAgentRunner, agents));
+
         // ── session state ────────────────────────────────────────
         var state = options.Resume
             ? await ResumeOrFreshAsync(store, workingDir, options.ResumeId)

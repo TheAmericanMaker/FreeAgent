@@ -6,6 +6,17 @@ All notable changes to FreeAgent are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added — sub-agents
+
+- **Sub-agents** — `AgentDefinition` / `AgentRegistry` + `SubAgentRunner` build an isolated
+  sub-session with a tool registry filtered to the role's allow-list, the role's system-prompt
+  suffix, no-op persistence, and silent events (so sub-agent activity doesn't leak into the
+  parent's console). `SpawnAgentTool` exposes spawning to the model via an `AgentSpawnCap` — not
+  auto-allowed, so every spawn requires explicit approval. Four default roles registered in the
+  host: **Explore** (read-only investigation), **Plan** (planning, no writes), **Coder**
+  (implementation), **Verify** (tests/lints).
+- Supporting kernel additions: `NoOpPersistenceStore` and `NullEventSink`.
+
 ### Added — hooks
 
 - **Pre/post-tool hooks** — fills the pipeline's existing `pre-hook` / `post-hook` seams.

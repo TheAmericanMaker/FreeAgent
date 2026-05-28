@@ -69,9 +69,11 @@ see below.)
   and streams hook stdout/stderr to the user's console (not the model's transcript). Substitutions:
   `{{tool_name}}`, `{{tool_input}}` (truncated). Failures are non-fatal. Remaining (later):
   `SessionStart` hooks (host-side, on new/resumed session).
-- [ ] **Sub-agents** — spawn isolated sessions with restricted tool sets
-  (`AgentSpawnCap` is already modeled); start with `Explore` / `Plan` / `Coder` /
-  `Verify` roles.
+- [x] **Sub-agents** — `AgentDefinition` / `AgentRegistry` + `SubAgentRunner` build an isolated
+  sub-session with a filtered tool registry, the role's system-prompt suffix, no-op persistence,
+  and silent events; `SpawnAgentTool` exposes it to the model with `AgentSpawnCap` (not auto-allowed
+  — each spawn requires approval or an allow rule). Four default roles registered in the host:
+  **Explore**, **Plan**, **Coder**, **Verify**.
 - [x] **Richer editing tools** — `EditFile` (literal string-replace with unique-match safety;
   `replace_all` opt-in) done. Remaining: **MultiEdit** (atomic batch of edits per file),
   **ApplyPatch** (unified diff), **colored diff view** for writes.
@@ -188,3 +190,4 @@ from the current per-turn `MaxIterations`) would be a separate counter if ever a
 - [x] Cross-session memory — `ReadMemoryTool` / `WriteMemoryTool` (filesystem-backed, XDG-aware)
 - [x] System-prompt assembly — base + working dir + git branch (from `.git/HEAD`) + project context file (`CLAUDE.md` / `AGENTS.md` / `FREEAGENT.md`)
 - [x] Pre/post-tool hooks — `HooksConfig` in `.freeagent/config.json`, `HookRunner` at the pre-hook / post-hook seams, `BashShellExecutor` host-side
+- [x] Sub-agents — `AgentRegistry` + `SubAgentRunner` + `SpawnAgentTool`; default roles `Explore` / `Plan` / `Coder` / `Verify`
