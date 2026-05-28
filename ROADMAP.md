@@ -89,9 +89,11 @@ see below.)
   `WriteMemoryTool` (writable, requires approval), backed by markdown files under
   `~/.config/freeagent/memory/` (XDG-aware). Keys restricted to `[A-Za-z0-9._-]+`. Registered in
   the host.
-- [x] **File history & undo** — per-write snapshots and `/undo` done (`SessionState.History`,
-  recorded by `WriteFileTool` / `EditFileTool`, popped by the host's `/undo`). Remaining:
-  **session revert to a prior turn** (revert both file state and the message transcript).
+- [x] **File history, `/undo`, and `/revert`** — per-write snapshots and `/undo` done
+  (`SessionState.History`, recorded by `WriteFileTool` / `EditFileTool` / `MultiEditFileTool` /
+  `ApplyPatchTool`, popped by the host's `/undo`). `/revert [N]` drops the last N user turns from
+  the transcript (leading System messages preserved). Files and conversation revert independently
+  — combine `/undo` and `/revert` for a full rollback.
 
 ## Architecture direction — decided (see [ADR 0005](docs/decisions/0005-headless-core-protocol.md))
 

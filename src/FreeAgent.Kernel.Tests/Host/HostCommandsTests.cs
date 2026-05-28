@@ -60,6 +60,40 @@ public sealed class HostCommandsTests
     }
 
     [Fact]
+    public void RevertDropsTheRequestedNumberOfTurnsPreservingSystemMessages()
+    {
+        var state = State();
+        state.Messages.Add(new Message(MessageRole.System, "sys"));
+        state.Messages.Add(new Message(MessageRole.User, "turn 1"));
+        state.Messages.Add(new Message(MessageRole.Assistant, "reply 1"));
+        state.Messages.Add(new Message(MessageRole.User, "turn 2"));
+        state.Messages.Add(new Message(MessageRole.Assistant, "reply 2"));
+        state.Messages.Add(new Message(MessageRole.User, "turn 3"));
+        state.Messages.Add(new Message(MessageRole.Assistant, "reply 3"));
+
+        HostCommands.Revert(state, ["/revert"]).Should().Contain("Reverted 1");
+        state.Messages.Select(m => m.Content).Should().Equal("sys", "turn 1", "reply 1", "turn 2", "reply 2");
+
+        HostCommands.Revert(state, ["/revert", "2"]).Should().Contain("Reverted 2");
+        state.Messages.Select(m => m.Content).Should().Equal("sys");
+    }
+
+    [Fact]
+    public void RevertWithNothingToDropReportsNothingToRevert()
+    {
+        var state = State();
+        HostCommands.Revert(state, ["/revert"]).Should().Contain("Nothing to revert");
+    }
+
+    [Fact]
+    public void RevertBeyondAvailableTurnsRefuses()
+    {
+        var state = State();
+        state.Messages.Add(new Message(MessageRole.User, "only"));
+        HostCommands.Revert(state, ["/revert", "5"]).Should().Contain("Only 1");
+    }
+
+    [Fact]
     public void PlanToggleFlipsAndExplicitOnOffSets()
     {
         var state = State();

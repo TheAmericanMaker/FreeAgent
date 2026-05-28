@@ -34,6 +34,9 @@ public static class HostCommands
             case "/undo":
                 Console.WriteLine(Undo(state));
                 break;
+            case "/revert":
+                Console.WriteLine(Revert(state, parts));
+                break;
             case "/doctor":
                 Console.WriteLine(DoctorText(state, diagnostics));
                 break;
@@ -51,6 +54,7 @@ public static class HostCommands
           /model           Show the active model and how to change it.
           /plan [on|off]   Toggle plan mode (only read-only tools run).
           /undo            Revert the most recent file change this session.
+          /revert [N]      Drop the last N user turns from the transcript (default 1). Files are not reverted (use /undo).
           /doctor          Print a one-shot configuration + health snapshot.
           exit | quit      End the session (also Ctrl+D / EOF).
           Ctrl+C           Cancel the current turn without quitting.
@@ -112,6 +116,39 @@ public static class HostCommands
         {
             return $"Undo failed for {snapshot.Path}: {ex.Message}";
         }
+    }
+
+    /// <summary>
+    /// Drops the most recent <paramref name="parts"/>[1] user turns from <paramref name="state"/>'s
+    /// transcript (default 1). Useful when the model went down a bad path: revert + retype. Does not
+    /// touch files — use <c>/undo</c> for that. Leading System messages are preserved.
+    /// </summary>
+    public static string Revert(SessionState state, string[] parts)
+    {
+        var n = 1;
+        if (parts.Length > 1 && int.TryParse(parts[1], out var parsed))
+            n = parsed;
+        if (n < 1)
+            return "Revert needs a positive number of turns.";
+
+        var userIndices = new List<int>();
+        for (var i = 0; i < state.Messages.Count; i++)
+            if (state.Messages[i].Role == MessageRole.User)
+                userIndices.Add(i);
+
+        if (userIndices.Count == 0)
+            return "Nothing to revert (no user turns yet).";
+
+        var targetTurn = userIndices.Count - n;
+        if (targetTurn < 0)
+            return $"Only {userIndices.Count} user turn(s) in this session; cannot revert {n}.";
+
+        var truncateAt = userIndices[targetTurn];
+        var dropped = state.Messages.Count - truncateAt;
+        while (state.Messages.Count > truncateAt)
+            state.Messages.RemoveAt(state.Messages.Count - 1);
+
+        return $"Reverted {n} turn(s); dropped {dropped} message(s). Files are unchanged — use /undo to roll back writes.";
     }
 
     /// <summary>Applies <c>/plan</c> (toggle, or <c>on</c>/<c>off</c>), mutating the session and returning the status line.</summary>
