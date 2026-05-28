@@ -134,10 +134,17 @@ Phasing (the kernel is *already* effectively headless — `SessionRuntime` + `IE
   and exposes three actions: `list-types` (one line per class/interface/struct/record/enum/delegate
   declaration, qualified by enclosing namespace + types), `list-members` (per-type methods, ctors,
   properties, fields, events, indexers, with parameter-type signatures), and `diagnostics` (syntax
-  parse errors only). Read-only and concurrency-safe; required cap is a `FileReadCap` on the resolved
-  path. Wired into the host registry and the `Explore`/`Plan` sub-agent whitelists. Output capped at
-  500 lines. *Semantic actions (find-references, callers, blast-radius) remain a follow-up — they
-  require a full `Compilation` with metadata references, which is a heavier integration.*
+  parse errors only). **Semantic actions** (full `CSharpCompilation` over the workspace, with
+  metadata references pulled from the host's `TRUSTED_PLATFORM_ASSEMBLIES`, cached after first
+  build): `find-references` (`file:line:col: Kind FullName` for every binding to the requested
+  symbol), `find-definition` (declaration site for the requested symbol), and `semantic-diagnostics`
+  (compiler errors and warnings — distinct from syntax parse errors). Read-only and
+  concurrency-safe; required cap is a `FileReadCap` on the resolved path. Wired into the host
+  registry and the `Explore`/`Plan` sub-agent whitelists. Output capped at 500 lines. *Limitation:
+  metadata references come from the host's assembly graph, not the workspace's `.csproj`, so a
+  reference into a NuGet package the host doesn't ship won't bind — workspace-local symbol queries
+  are fully supported. A `.csproj`-aware reference resolver remains a follow-up. Callers /
+  blast-radius are not yet exposed.*
 - [ ] **TUI (protocol client, opencode-style)** — per ADR 0005, the full-screen TUI is a
   **frontend client over the protocol**, not embedded in the host: a Bun/SolidJS app using
   **opentui** (the stack opencode uses) attached to the headless core. opentui is Zig + C-ABI +

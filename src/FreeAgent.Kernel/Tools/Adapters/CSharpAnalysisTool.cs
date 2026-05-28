@@ -29,16 +29,20 @@ public sealed class CSharpAnalysisTool : ITool
 
     public string Name => "CSharpAnalysis";
     public string Description =>
-        "Roslyn-backed syntactic analysis for C# files. Action 'list-types' lists every "
+        "Roslyn-backed analysis for C# files. Syntactic actions: 'list-types' lists every "
         + "class/interface/struct/record/enum/delegate declaration as 'file:line: kind Namespace.Type'. "
         + "'list-members' lists methods/properties/fields per type. 'diagnostics' surfaces parse errors. "
-        + "Takes 'action' (required) and optional 'path' (file or directory, defaults to the workspace root) "
-        + "and 'glob' (e.g. 'src/**/*.cs'). Output capped to keep results bounded.";
+        + "Semantic actions (full compilation): 'find-references' returns 'file:line:col' for every "
+        + "binding to the named symbol; 'find-definition' returns the declaration site(s); "
+        + "'semantic-diagnostics' surfaces compiler errors and warnings (not just parse errors). "
+        + "Takes 'action' (required), 'symbol' (required for find-references / find-definition), and "
+        + "optional 'path' (file or directory, defaults to the workspace root) and 'glob' "
+        + "(e.g. 'src/**/*.cs'). Output capped to keep results bounded.";
     public bool IsReadOnly => true;
     public bool IsConcurrencySafe => true;
 
     public JsonDocument InputSchema { get; } = JsonDocument.Parse(
-        """{"type":"object","required":["action"],"properties":{"action":{"type":"string","enum":["list-types","list-members","diagnostics"]},"path":{"type":"string"},"glob":{"type":"string"}}}""");
+        """{"type":"object","required":["action"],"properties":{"action":{"type":"string","enum":["list-types","list-members","diagnostics","find-references","find-definition","semantic-diagnostics"]},"symbol":{"type":"string"},"path":{"type":"string"},"glob":{"type":"string"}}}""");
 
     public IReadOnlyList<Capability> RequiredCapabilities(JsonDocument arguments, ToolContext context) =>
         [new FileReadCap(ResolveRoot(arguments, context))];
@@ -54,6 +58,12 @@ public sealed class CSharpAnalysisTool : ITool
         var files = CollectCSharpFiles(root, globFilter);
         if (files.Count == 0)
             return ToolResult.Empty($"No .cs files found under {root}.");
+
+        // Semantic actions need the full compilation; route to that path and return immediately.
+        if (action is "find-references" or "find-definition" or "semantic-diagnostics")
+        {
+            return await ExecuteSemanticAsync(action, arguments, root, files, cancellationToken);
+        }
 
         var sb = new StringBuilder();
         var lines = 0;
@@ -82,7 +92,9 @@ public sealed class CSharpAnalysisTool : ITool
                     AppendDiagnostics(sb, tree, relative, ref lines, ref truncated);
                     break;
                 default:
-                    return ToolResult.InvalidInput($"Unknown action '{action}'. Use 'list-types', 'list-members', or 'diagnostics'.");
+                    return ToolResult.InvalidInput(
+                        $"Unknown action '{action}'. Use 'list-types', 'list-members', 'diagnostics', "
+                        + "'find-references', 'find-definition', or 'semantic-diagnostics'.");
             }
 
             if (truncated)
@@ -96,6 +108,109 @@ public sealed class CSharpAnalysisTool : ITool
             sb.Append($"… (truncated at {MaxLines} lines)\n");
 
         return ToolResult.Success(sb.ToString().TrimEnd('\n'));
+    }
+
+    private static async ValueTask<ToolResult> ExecuteSemanticAsync(
+        string action, JsonDocument arguments, string root, IReadOnlyList<string> files, CancellationToken cancellationToken)
+    {
+        await Task.Yield(); // building a Compilation is CPU work — give other turns a chance to make progress.
+
+        var sb = new StringBuilder();
+        var lines = 0;
+        var truncated = false;
+
+        var compilation = RoslynSemanticHelpers.BuildWorkspaceCompilation(files, cancellationToken);
+
+        if (action == "semantic-diagnostics")
+        {
+            foreach (var diag in compilation.GetDiagnostics(cancellationToken).Where(d => d.Severity >= DiagnosticSeverity.Warning))
+            {
+                var loc = diag.Location.GetLineSpan();
+                if (string.IsNullOrEmpty(loc.Path)) continue; // synthetic diagnostics without a source location
+                var relative = WorkspaceSearch.RelativePath(root, loc.Path);
+                var line = loc.StartLinePosition.Line + 1;
+                var col = loc.StartLinePosition.Character + 1;
+                if (!Append(sb, $"{relative}:{line}:{col}: {diag.Severity} {diag.Id}: {diag.GetMessage()}", ref lines, ref truncated))
+                    break;
+            }
+        }
+        else
+        {
+            // find-references / find-definition both need a target symbol name.
+            if (!arguments.RootElement.TryGetProperty("symbol", out var symProp)
+                || symProp.GetString() is not { Length: > 0 } symbolName)
+            {
+                return ToolResult.InvalidInput($"'{action}' requires a 'symbol' argument (e.g. \"MyClass.Foo\").");
+            }
+
+            // Match against the final identifier of a dotted symbol path so callers can pass either
+            // "Foo" or "MyClass.Foo". The full path comparison is a string contains, which is loose
+            // but matches the most common ask ("find references to Foo").
+            var simpleName = symbolName.Contains('.') ? symbolName[(symbolName.LastIndexOf('.') + 1)..] : symbolName;
+            var pathHint = symbolName;
+
+            foreach (var tree in compilation.SyntaxTrees)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var model = compilation.GetSemanticModel(tree);
+                var relative = WorkspaceSearch.RelativePath(root, tree.FilePath);
+
+                if (action == "find-references")
+                {
+                    foreach (var ident in tree.GetRoot().DescendantNodes().OfType<IdentifierNameSyntax>())
+                    {
+                        if (ident.Identifier.Text != simpleName) continue;
+                        var info = model.GetSymbolInfo(ident);
+                        var symbol = info.Symbol ?? info.CandidateSymbols.FirstOrDefault();
+                        if (symbol is null) continue;
+                        if (!SymbolMatches(symbol, simpleName, pathHint)) continue;
+
+                        var pos = ident.GetLocation().GetLineSpan().StartLinePosition;
+                        if (!Append(sb, $"{relative}:{pos.Line + 1}:{pos.Character + 1}: {symbol.Kind} {symbol.ToDisplayString()}", ref lines, ref truncated))
+                            return Final(sb, lines, truncated, action, root);
+                    }
+                }
+                else // find-definition
+                {
+                    foreach (var decl in tree.GetRoot().DescendantNodes().OfType<MemberDeclarationSyntax>())
+                    {
+                        var symbol = model.GetDeclaredSymbol(decl);
+                        if (symbol is null) continue;
+                        if (symbol.Name != simpleName) continue;
+                        if (!SymbolMatches(symbol, simpleName, pathHint)) continue;
+
+                        var pos = decl.GetLocation().GetLineSpan().StartLinePosition;
+                        if (!Append(sb, $"{relative}:{pos.Line + 1}:{pos.Character + 1}: {symbol.Kind} {symbol.ToDisplayString()}", ref lines, ref truncated))
+                            return Final(sb, lines, truncated, action, root);
+                    }
+                }
+            }
+        }
+
+        return Final(sb, lines, truncated, action, root);
+    }
+
+    private static ToolResult Final(StringBuilder sb, int lines, bool truncated, string action, string root)
+    {
+        if (sb.Length == 0)
+            return ToolResult.Empty($"No results for action '{action}' under {root}.");
+        if (truncated)
+            sb.Append($"… (truncated at {MaxLines} lines)\n");
+        return ToolResult.Success(sb.ToString().TrimEnd('\n'));
+    }
+
+    /// <summary>
+    /// Matches a Roslyn symbol against the user's requested target. Final-identifier match is the
+    /// minimum; if the user gave a dotted path, also require the symbol's containing type's name to
+    /// appear in the requested string (loose enough to allow either "MyClass.Foo" or "Foo", strict
+    /// enough to avoid matching every method called "Add").
+    /// </summary>
+    private static bool SymbolMatches(ISymbol symbol, string simpleName, string pathHint)
+    {
+        if (symbol.Name != simpleName) return false;
+        if (!pathHint.Contains('.')) return true;
+        var owner = symbol.ContainingType?.Name;
+        return owner is null || pathHint.Contains(owner, StringComparison.Ordinal);
     }
 
     private static List<string> CollectCSharpFiles(string root, System.Text.RegularExpressions.Regex? globFilter)

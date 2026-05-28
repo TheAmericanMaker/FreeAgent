@@ -192,6 +192,107 @@ public sealed class CSharpAnalysisToolTests
         result.Content.Should().Contain("class N.A").And.NotContain("class N.B");
     }
 
+    // ── semantic actions ──────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task FindReferencesLocatesEveryBindingToTheNamedSymbol()
+    {
+        using var work = new TempWorkspace();
+        work.Write("Lib.cs", """
+            namespace N;
+            public static class Lib
+            {
+                public static int Foo(int x) => x + 1;
+            }
+            """);
+        work.Write("Use.cs", """
+            namespace N;
+            public class Caller
+            {
+                public int A() => Lib.Foo(1);
+                public int B() => Lib.Foo(2);
+            }
+            """);
+
+        var tool = new CSharpAnalysisTool();
+        var result = await tool.ExecuteAsync(
+            Args(new { action = "find-references", symbol = "Lib.Foo" }),
+            Context(work.Root), CancellationToken.None);
+
+        result.Kind.Should().Be(ToolResultKind.Success);
+        // Two call sites, on lines 4 and 5 of Use.cs.
+        result.Content.Should().Contain("Use.cs:4:").And.Contain("Use.cs:5:").And.Contain("Foo");
+    }
+
+    [Fact]
+    public async Task FindReferencesRejectsMissingSymbolArgument()
+    {
+        using var work = new TempWorkspace();
+        work.Write("a.cs", "class A {}");
+
+        var tool = new CSharpAnalysisTool();
+        var result = await tool.ExecuteAsync(
+            Args(new { action = "find-references" }), Context(work.Root), CancellationToken.None);
+
+        result.Kind.Should().Be(ToolResultKind.InvalidInput);
+        result.Content.Should().Contain("symbol");
+    }
+
+    [Fact]
+    public async Task FindDefinitionLocatesDeclarationSite()
+    {
+        using var work = new TempWorkspace();
+        work.Write("Lib.cs", """
+            namespace N;
+            public class Service
+            {
+                public void Run() { }
+            }
+            """);
+
+        var tool = new CSharpAnalysisTool();
+        var result = await tool.ExecuteAsync(
+            Args(new { action = "find-definition", symbol = "Service.Run" }),
+            Context(work.Root), CancellationToken.None);
+
+        result.Kind.Should().Be(ToolResultKind.Success);
+        result.Content.Should().Contain("Lib.cs:4:").And.Contain("Method").And.Contain("Run");
+    }
+
+    [Fact]
+    public async Task SemanticDiagnosticsReportsCompilerErrors()
+    {
+        using var work = new TempWorkspace();
+        // Using an undefined type triggers a semantic (binding) error — not a parse error.
+        work.Write("Broken.cs", """
+            namespace N;
+            public class C { Undefined x; }
+            """);
+
+        var tool = new CSharpAnalysisTool();
+        var result = await tool.ExecuteAsync(
+            Args(new { action = "semantic-diagnostics" }), Context(work.Root), CancellationToken.None);
+
+        result.Kind.Should().Be(ToolResultKind.Success);
+        result.Content.Should().Contain("Broken.cs:").And.Contain("Error CS");
+    }
+
+    [Fact]
+    public async Task SemanticDiagnosticsReturnsEmptyForCleanWorkspace()
+    {
+        using var work = new TempWorkspace();
+        work.Write("Clean.cs", """
+            namespace N;
+            public class Clean { public int X => 42; }
+            """);
+
+        var tool = new CSharpAnalysisTool();
+        var result = await tool.ExecuteAsync(
+            Args(new { action = "semantic-diagnostics" }), Context(work.Root), CancellationToken.None);
+
+        result.Kind.Should().Be(ToolResultKind.Empty);
+    }
+
     [Fact]
     public async Task NoCSharpFilesReturnsEmpty()
     {

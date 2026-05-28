@@ -6,6 +6,21 @@ All notable changes to FreeAgent are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added — Roslyn semantic actions
+
+- **`CSharpAnalysis` gains `find-references` / `find-definition` / `semantic-diagnostics`** — full
+  `CSharpCompilation` over the workspace's `.cs` files, with metadata references pulled from the
+  host's `TRUSTED_PLATFORM_ASSEMBLIES` and cached after the first build (helper:
+  `RoslynSemanticHelpers`). `find-references` walks every `IdentifierNameSyntax` and emits
+  `file:line:col: Kind FullName` for every binding whose final identifier matches the requested
+  symbol (and, if the symbol was dotted, whose containing type also appears in the requested path).
+  `find-definition` walks `MemberDeclarationSyntax` nodes and reports declaration sites the same
+  way. `semantic-diagnostics` returns compiler errors and warnings from the full compilation —
+  distinct from the existing `diagnostics` action's parse-only errors. Limitation: metadata refs
+  come from the host's assembly graph rather than the workspace's `.csproj`, so a reference into a
+  NuGet package the host doesn't ship won't bind. Workspace-local symbol queries are fully
+  supported. A `.csproj`-aware reference resolver remains a follow-up.
+
 ### Added — provider-model scaffolding
 
 - **`StopReason` enum** — normalized stop reason on every `StreamChunk`
