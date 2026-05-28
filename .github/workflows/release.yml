@@ -1,0 +1,66 @@
+name: release
+
+# Cut a release by pushing a tag like `v0.1.0`.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write   # create the GitHub Release and upload assets
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Derive version from tag
+        id: ver
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Test
+        run: dotnet test FreeAgent.slnx -c Release --nologo
+
+      - name: Pack global tool
+        run: dotnet pack src/FreeAgent.Host -c Release -p:Version=${{ steps.ver.outputs.version }} -o dist --nologo
+
+      - name: Publish self-contained binaries
+        run: |
+          set -euo pipefail
+          for rid in linux-x64 osx-arm64 win-x64; do
+            echo "Publishing $rid…"
+            dotnet publish src/FreeAgent.Host -c Release -r "$rid" --self-contained true \
+              -p:PublishSingleFile=true -p:Version=${{ steps.ver.outputs.version }} \
+              -o "publish/$rid" --nologo
+            if [ "$rid" = "win-x64" ]; then
+              cp "publish/$rid/FreeAgent.Host.exe" "dist/freeagent-$rid.exe"
+            else
+              cp "publish/$rid/FreeAgent.Host" "dist/freeagent-$rid"
+            fi
+          done
+
+      - name: Publish to NuGet (if a key is configured)
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          if [ -n "${NUGET_API_KEY:-}" ]; then
+            dotnet nuget push dist/*.nupkg --api-key "$NUGET_API_KEY" \
+              --source https://api.nuget.org/v3/index.json --skip-duplicate
+          else
+            echo "NUGET_API_KEY not set; skipping NuGet publish (binaries + nupkg still attached to the release)."
+          fi
+
+      - name: Create GitHub Release and attach assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.nupkg
+            dist/freeagent-linux-x64
+            dist/freeagent-osx-arm64
+            dist/freeagent-win-x64.exe
+          generate_release_notes: true

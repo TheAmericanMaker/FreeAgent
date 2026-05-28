@@ -54,24 +54,41 @@ The largest is OpenAIProvider.cs at 307 lines …
 - **Crash-safe.** Sessions persist to JSONL through an atomic write-temp → fsync →
   rename → fsync-dir sequence, so a crash mid-write never corrupts the transcript.
 
-## Quick start
+## Install
 
 Requires the **.NET 10 SDK** (the repo pins `10.0.100` via `global.json` with
-`rollForward: latestMinor`).
+`rollForward: latestMinor`). Install the `freeagent` command as a .NET global tool:
 
 ```bash
-# 1. Build the whole solution
-dotnet build FreeAgent.slnx
+# From a published release (once available on NuGet):
+dotnet tool install --global FreeAgent
 
-# 2. Run the tests (135, all green)
-dotnet test FreeAgent.slnx
+# Or from a local checkout:
+./scripts/install.sh        # packs + installs/updates the global tool
 
-# 3. Point at a provider and launch the REPL
-export OPENAI_API_KEY=sk-...                       # required
-export OPENAI_BASE_URL=https://api.openai.com/v1   # optional (this is the default)
-export FREEMODEL=gpt-4o-mini                        # optional (this is the default)
+freeagent --version
+freeagent --help
+```
 
-dotnet run --project src/FreeAgent.Host
+If the command isn't found, add the tools directory to your `PATH`:
+`export PATH="$PATH:$HOME/.dotnet/tools"`.
+
+Then, from **any project directory**, just run:
+
+```bash
+export OPENAI_API_KEY=sk-...   # or put it in the config file (see Configuration)
+cd ~/code/my-project
+freeagent
+```
+
+The directory you launch from is the agent's sandbox.
+
+## Quick start (from source, without installing)
+
+```bash
+dotnet build FreeAgent.slnx     # build
+dotnet test  FreeAgent.slnx     # 185 tests, all green
+OPENAI_API_KEY=sk-... dotnet run --project src/FreeAgent.Host
 ```
 
 You get a prompt. Type a request; the model streams its reply and may call tools.
@@ -104,13 +121,29 @@ The host is configured through environment variables and a few flags:
 
 | Flag              | Purpose                                                          |
 | ----------------- | --------------------------------------------------------------- |
+| `--help`, `-h`    | Show usage and exit.                                             |
+| `--version`       | Show the version and exit.                                      |
 | `--verbose`, `-v` | Print streamed reasoning (dimmed) and a `[Tokens: in → out]` line. |
 | `--resume [id]`   | Resume the session in `session.jsonl` (optionally requiring its id). |
 
 At the prompt, `/plan [on\|off]` toggles plan mode (read-only tools only).
 
+### Provider settings without env vars
+
+So the bare `freeagent` command works in any shell, the provider settings can also live in a
+user config file at `$XDG_CONFIG_HOME/freeagent/config.json` (default
+`~/.config/freeagent/config.json`). Precedence is **environment variable > config file > default**:
+
+```jsonc
+{
+  "baseUrl": "http://localhost:11434/v1",  // e.g. Ollama
+  "model": "qwen2.5-coder",
+  "apiKey": "…"                            // optional; prefer the env var, or chmod 600 this file
+}
+```
+
 Because any OpenAI-compatible base URL is accepted, a local server typically just
-needs `OPENAI_BASE_URL=http://localhost:<port>/v1` and any non-empty `OPENAI_API_KEY`.
+needs `baseUrl` set to `http://localhost:<port>/v1` (and any non-empty key).
 
 ### Granting permissions via config
 
@@ -318,7 +351,7 @@ docs/                              Architecture notes, ADRs, and the reimplement
 
 ```bash
 dotnet build FreeAgent.slnx        # warnings are errors
-dotnet test  FreeAgent.slnx        # 135 tests
+dotnet test  FreeAgent.slnx        # 185 tests
 dotnet run --project src/FreeAgent.Host -- --verbose
 ```
 
@@ -328,6 +361,12 @@ real signal. Tests are written against fakes (`FakeProvider`, `FakeTool`,
 or real filesystem. See `docs/architecture.md` for a deeper tour and
 `docs/usage.md` for host details and recipes.
 
+**Releasing.** Push a `v*` tag (e.g. `git tag v0.1.0 && git push --tags`) to trigger
+`.github/workflows/release.yml`: it tests, packs the tool, attaches self-contained
+binaries to the GitHub Release, and—if a `NUGET_API_KEY` secret is set—publishes to
+NuGet so others can `dotnet tool install -g FreeAgent`. (NuGet IDs are global; if
+`FreeAgent` is taken, change `PackageId` in `src/FreeAgent.Host/FreeAgent.Host.csproj`.)
+
 ## Design decisions
 
 The reasoning behind the shape of the project lives in `docs/decisions/`:
@@ -336,6 +375,7 @@ The reasoning behind the shape of the project lives in `docs/decisions/`:
 - [0002 — Kernel-first implementation strategy](docs/decisions/0002-kernel-first.md)
 - [0003 — Linux-native first](docs/decisions/0003-linux-native-first.md)
 - [0004 — Extension-first capabilities](docs/decisions/0004-extension-first-capabilities.md)
+- [0005 — Headless core + protocol, with pluggable frontends](docs/decisions/0005-headless-core-protocol.md)
 
 The full behavioral contract the kernel implements is in
 `docs/codecarto/reimplementation-spec.md`.
