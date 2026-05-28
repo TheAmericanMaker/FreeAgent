@@ -176,9 +176,13 @@ Phasing (the kernel is *already* effectively headless — `SessionRuntime` + `IE
   process talking the protocol rather than embedded. (A native .NET TUI — `Spectre.Console` /
   `Terminal.Gui` — was the in-process alternative; kept only as a possible minimal fallback
   renderer.)
-- [ ] **Command palette** — a `ctrl+p` fuzzy command palette backed by a command registry, the
-  opencode model: named, dispatchable commands with metadata that feed both keybindings and the
-  palette. Supersedes ad-hoc slash-commands (the host already has a command-dispatch seam).
+- [x] **Command palette (registry layer)** — kernel-side `CommandRegistry` with
+  `CommandDefinition` records (id, label, description, shortcut, category) and a subsequence
+  fuzzy matcher (`FuzzyScore`) so a tighter cluster of query characters scores ahead of a wider
+  spread. `HostCommands.BuildDefaultRegistry` registers every existing slash command — single
+  source of truth for both the new `/commands [query]` REPL command and the future TUI palette
+  (a frontend just binds `ctrl+p` to the same registry). The visual palette UI itself ships with
+  the TUI client (still out of autonomous scope).
 - [ ] **Status line repositioning** — move the `Session | Model | working dir` line from the top
   to a persistent bottom status bar, with rule lines above and below the input box. *Presentation
   only; lands as part of the TUI client (above) — the current console host keeps the top line.*

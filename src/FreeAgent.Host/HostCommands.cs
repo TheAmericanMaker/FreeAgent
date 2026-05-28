@@ -52,6 +52,9 @@ public static class HostCommands
             case "/fork":
                 Console.WriteLine(Fork(state).GetAwaiter().GetResult());
                 break;
+            case "/commands":
+                Console.WriteLine(CommandsList(parts));
+                break;
             default:
                 Console.WriteLine($"Unknown command: {parts[0]}. Try /help.");
                 break;
@@ -80,6 +83,8 @@ public static class HostCommands
           /fork            Snapshot the current session to session-fork-<id>.jsonl so you can
                            branch the conversation. Resume later with `mv …jsonl session.jsonl
                            && freeagent --resume <id>`.
+          /commands [q]    List registered host commands (fuzzy filter by [q]). Same registry the
+                           future TUI/editor frontends bind their command palette to.
           exit | quit      End the session (also Ctrl+D / EOF).
           Ctrl+C           Cancel the current turn without quitting.
         """;
@@ -275,6 +280,59 @@ public static class HostCommands
             default:
                 return $"Unknown /serve subcommand '{parts[1]}'. Use start, stop, or status.";
         }
+    }
+
+    /// <summary>
+    /// Single source of truth for the host's command palette. Every <c>/foo</c> slash command the
+    /// dispatcher above understands is registered here with category + label + description so
+    /// future frontends (TUI, VS Code) can drive the same palette without re-listing commands.
+    /// </summary>
+    public static CommandRegistry BuildDefaultRegistry()
+    {
+        var registry = new CommandRegistry();
+        registry.Register(new("help", "Help", "List the commands the host understands.", Shortcut: "/help", Category: "Session"));
+        registry.Register(new("status", "Show session status", "Session id, model, working dir, message count, plan mode.", Shortcut: "/status", Category: "Session"));
+        registry.Register(new("model", "Show active model", "How to change provider and model.", Shortcut: "/model", Category: "Session"));
+        registry.Register(new("plan.toggle", "Toggle plan mode", "Only read-only tools run while plan mode is on.", Shortcut: "/plan", Category: "Plan"));
+        registry.Register(new("undo", "Undo last file change", "Revert the most recent agent-driven file write.", Shortcut: "/undo", Category: "Editing"));
+        registry.Register(new("revert", "Revert N user turns", "Drop the last N user turns from the transcript (files unchanged).", Shortcut: "/revert", Category: "Editing"));
+        registry.Register(new("tag", "Tag session", "Add a tag visible in /status and /doctor.", Shortcut: "/tag", Category: "Session"));
+        registry.Register(new("untag", "Untag session", "Remove a session tag.", Shortcut: "/untag", Category: "Session"));
+        registry.Register(new("doctor", "Diagnostics snapshot", "Provider, model, tool inventory, sub-agent roles, plan mode, approvals.", Shortcut: "/doctor", Category: "Diagnostics"));
+        registry.Register(new("session.fork", "Fork session", "Snapshot the current transcript to a sibling JSONL so you can branch the conversation.", Shortcut: "/fork", Category: "Session"));
+        registry.Register(new("serve.start", "Start local model server", "Launch llama-server (or any OpenAI-compat binary) and print the OPENAI_BASE_URL line.", Shortcut: "/serve start …", Category: "Local model"));
+        registry.Register(new("serve.stop", "Stop local model server", "Kill the recorded model-server process.", Shortcut: "/serve stop", Category: "Local model"));
+        registry.Register(new("serve.status", "Model server status", "Is the local model server running?", Shortcut: "/serve status", Category: "Local model"));
+        registry.Register(new("run", "Run playbook", "Render a Markdown playbook with positional args and dispatch the user turn.", Shortcut: "/run <name> [args]", Category: "Playbooks"));
+        registry.Register(new("commands", "Show command palette", "Fuzzy list of every registered host command (the same registry the TUI palette will use).", Shortcut: "/commands [q]", Category: "Diagnostics"));
+        return registry;
+    }
+
+    /// <summary>Render the command list (optionally filtered) for the REPL.</summary>
+    public static string CommandsList(string[] parts)
+    {
+        var query = parts.Length > 1 ? string.Join(' ', parts.Skip(1)) : string.Empty;
+        var registry = BuildDefaultRegistry();
+        var commands = registry.Search(query);
+        if (commands.Count == 0)
+            return $"No commands match '{query}'.";
+
+        var width = commands.Max(c => (c.Shortcut ?? c.Id).Length);
+        var lines = new List<string>(commands.Count + 1);
+        var lastCategory = "";
+        foreach (var c in commands)
+        {
+            var cat = c.Category ?? "Misc";
+            if (cat != lastCategory)
+            {
+                if (lines.Count > 0) lines.Add(string.Empty);
+                lines.Add($"[{cat}]");
+                lastCategory = cat;
+            }
+            var key = (c.Shortcut ?? c.Id).PadRight(width);
+            lines.Add($"  {key}  {c.Label}{(string.IsNullOrEmpty(c.Description) ? "" : $" — {c.Description}")}");
+        }
+        return string.Join('\n', lines);
     }
 
     /// <summary>

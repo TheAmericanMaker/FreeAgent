@@ -6,6 +6,23 @@ All notable changes to FreeAgent are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added — command-palette registry
+
+- **`CommandRegistry` + `CommandDefinition`** — single source of truth for the host's named
+  commands. Each definition carries id, label, optional description, optional shortcut display
+  string, and optional category. Designed so the future Bun/opentui TUI's `ctrl+p` palette and any
+  editor extension bind their command list to the same registry the host slash dispatcher uses.
+- **Subsequence fuzzy matcher** — `CommandRegistry.Search(query)` and the static helper
+  `FuzzyScore(query, haystack)` score by `(last - first)` indices of the query characters in the
+  haystack, so a tighter cluster beats a wider spread (`fk` over a label containing `fork` beats
+  `fk` spread across `fork-long-id`). Case-insensitive; an empty query returns everything in the
+  default category+label order.
+- **`HostCommands.BuildDefaultRegistry`** — registers every existing slash command (help, status,
+  model, plan, undo, revert, tag, untag, doctor, fork, serve, run, commands) so the registry
+  is preloaded with everything the user can do today.
+- **`/commands [query]` slash command** — renders the registry grouped by category, indented under
+  the shortcut display string, with a one-line description. Fuzzy-filters when a query is given.
+
 ### Added — Google Vertex AI provider
 
 - **`VertexProvider`** — native client for Anthropic Claude models on Google Vertex AI.

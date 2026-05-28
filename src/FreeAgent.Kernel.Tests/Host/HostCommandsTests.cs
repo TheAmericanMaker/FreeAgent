@@ -84,6 +84,45 @@ public sealed class HostCommandsTests
     }
 
     [Fact]
+    public void BuildDefaultRegistryRegistersEverySlashCommand()
+    {
+        var registry = HostCommands.BuildDefaultRegistry();
+
+        registry.All.Select(c => c.Id).Should().Contain([
+            "help", "status", "model", "plan.toggle", "undo", "revert",
+            "tag", "untag", "doctor", "session.fork",
+            "serve.start", "serve.stop", "serve.status",
+            "run", "commands"
+        ]);
+    }
+
+    [Fact]
+    public void CommandsListWithNoFilterShowsEveryCategory()
+    {
+        var output = HostCommands.CommandsList(["/commands"]);
+
+        output.Should().Contain("[Session]").And.Contain("[Plan]").And.Contain("[Editing]")
+            .And.Contain("[Diagnostics]").And.Contain("[Local model]");
+        output.Should().Contain("/fork").And.Contain("/serve start");
+    }
+
+    [Fact]
+    public void CommandsListWithQueryFuzzyFilters()
+    {
+        var output = HostCommands.CommandsList(["/commands", "fk"]);
+
+        output.Should().Contain("/fork").And.NotContain("/plan");
+    }
+
+    [Fact]
+    public void CommandsListWithUnknownQueryReportsNoMatches()
+    {
+        var output = HostCommands.CommandsList(["/commands", "xyzzy"]);
+
+        output.Should().Contain("No commands match");
+    }
+
+    [Fact]
     public async Task ForkOnEmptySessionRefuses()
     {
         var state = State();
