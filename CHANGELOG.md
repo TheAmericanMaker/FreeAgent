@@ -6,6 +6,13 @@ All notable changes to FreeAgent are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added — cross-session memory
+
+- **`ReadMemoryTool` / `WriteMemoryTool`** — markdown-file-backed memory under
+  `~/.config/freeagent/memory/` (XDG-aware). Read is auto-allowed via the existing `MemoryCap` read
+  rule; write requires approval (interactive or an allow rule). Keys are restricted to
+  `[A-Za-z0-9._-]+` so they cannot escape the root.
+
 ### Added — editing & undo
 
 - **File history + `/undo`** — `WriteFileTool` and `EditFileTool` snapshot the pre-write content

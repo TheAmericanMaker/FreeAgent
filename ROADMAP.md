@@ -73,8 +73,10 @@ see below.)
   **ApplyPatch** (unified diff), **colored diff view** for writes.
 - [ ] **System-prompt assembly** — base instructions + a project file (e.g. `CLAUDE.md`)
   + git branch/status + cross-session memory.
-- [ ] **Cross-session memory** — `MemoryCap` is modeled; add a memory store and a
-  read/write tool.
+- [x] **Cross-session memory** — `ReadMemoryTool` (read-only, auto-allowed via `MemoryCap` read) +
+  `WriteMemoryTool` (writable, requires approval), backed by markdown files under
+  `~/.config/freeagent/memory/` (XDG-aware). Keys restricted to `[A-Za-z0-9._-]+`. Registered in
+  the host.
 - [x] **File history & undo** — per-write snapshots and `/undo` done (`SessionState.History`,
   recorded by `WriteFileTool` / `EditFileTool`, popped by the host's `/undo`). Remaining:
   **session revert to a prior turn** (revert both file state and the message transcript).
@@ -175,3 +177,4 @@ from the current per-turn `MaxIterations`) would be a separate counter if ever a
 - [x] `EditFile` tool — safe in-place string-replace editing (unique-match by default)
 - [x] Result cache — read-only `Success` cached, mutating tools invalidate (`cache-lookup` / `cache-write` / `invalidate` seams filled)
 - [x] File history + `/undo` — per-write snapshots in `SessionState.History`, restored or deleted by `HostCommands.Undo`
+- [x] Cross-session memory — `ReadMemoryTool` / `WriteMemoryTool` (filesystem-backed, XDG-aware)

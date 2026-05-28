@@ -64,6 +64,8 @@ public static class Program
         registry.Register(new GrepTool());
         registry.Register(new EnterPlanModeTool());
         registry.Register(new ExitPlanModeTool());
+        registry.Register(new ReadMemoryTool());
+        registry.Register(new WriteMemoryTool());
 
         // ── session state ────────────────────────────────────────
         var state = options.Resume
