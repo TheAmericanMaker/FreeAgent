@@ -20,6 +20,14 @@ public static class Program
             return;
         }
 
+        // `freeagent setup` — interactive provider-config wizard. Doesn't load providers,
+        // doesn't try to contact a network, doesn't insist on an API key being already set.
+        if (options.Subcommand == HostSubcommand.Setup)
+        {
+            await InteractiveSetup.RunAsync();
+            return;
+        }
+
         var workingDir = Environment.CurrentDirectory;
         var providerConfig = ProviderConfig.Load();
         var providerName = providerConfig.ResolveProvider();
@@ -307,9 +315,11 @@ public static class Program
             freeagent {Version} — interactive agent CLI over any OpenAI-compatible endpoint.
 
             USAGE
-              freeagent [options]
+              freeagent [options]            Start the REPL in the current directory.
+              freeagent setup                Run the interactive provider-config wizard.
 
-            Run it from the directory you want the agent to work in; that directory is its sandbox.
+            Run the REPL from the directory you want the agent to work in; that directory is its
+            sandbox. First time? Run 'freeagent setup' to pick a provider and write the config.
 
             OPTIONS
               -h, --help        Show this help and exit.
@@ -317,20 +327,19 @@ public static class Program
               -v, --verbose     Stream the model's reasoning (dimmed) and per-turn token usage.
                   --resume [id] Resume the session in ./session.jsonl (optionally requiring its id).
 
-            PROMPT COMMANDS
+            PROMPT COMMANDS (during REPL — type /help for the full list)
               /plan [on|off]    Toggle plan mode (only read-only tools run).
+              /doctor           Print provider / model / tool inventory.
+              /commands [q]     Fuzzy command palette.
               exit | quit       End the session (also saved on Ctrl+D / EOF).
               Ctrl+C            Cancel the current turn without quitting.
 
             CONFIGURATION (precedence: provider-specific env > config section > legacy > default)
-              FREEPROVIDER       Active provider — "openai" (default) or "anthropic".
-              OPENAI_API_KEY     Key for the OpenAI-compatible provider.
-              OPENAI_BASE_URL    Endpoint base (default {ProviderConfig.DefaultBaseUrl}).
-              ANTHROPIC_API_KEY  Key for the native Anthropic provider.
-              ANTHROPIC_BASE_URL Endpoint base (default {ProviderConfig.AnthropicDefaultBaseUrl}).
+              FREEPROVIDER       Active provider: openai (default) / anthropic / azure / ollama / bedrock / vertex.
               FREEMODEL          Model name (provider-agnostic env override).
-              User config:       {ProviderConfig.ConfigPath()}  (provider + per-provider sections)
+              User config:       {ProviderConfig.ConfigPath()}  (written by 'freeagent setup')
               Permissions:       ./.freeagent/config.json  (allow/deny rules)
+              See docs/usage.md for the per-provider env-var matrix.
             """);
     }
 

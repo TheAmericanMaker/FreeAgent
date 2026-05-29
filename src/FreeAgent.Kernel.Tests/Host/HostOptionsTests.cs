@@ -71,4 +71,32 @@ public sealed class HostOptionsTests
         options.Resume.Should().BeTrue();
         options.ResumeId.Should().Be("sess-1");
     }
+
+    [Fact]
+    public void DefaultSubcommandIsRepl()
+    {
+        HostOptions.Parse([]).Subcommand.Should().Be(HostSubcommand.Repl);
+    }
+
+    [Fact]
+    public void SetupSubcommandIsRecognized()
+    {
+        HostOptions.Parse(["setup"]).Subcommand.Should().Be(HostSubcommand.Setup);
+        HostOptions.Parse(["SETUP"]).Subcommand.Should().Be(HostSubcommand.Setup);
+    }
+
+    [Fact]
+    public void SubcommandStillParsesTrailingFlags()
+    {
+        var options = HostOptions.Parse(["setup", "--verbose"]);
+        options.Subcommand.Should().Be(HostSubcommand.Setup);
+        options.Verbose.Should().BeTrue();
+    }
+
+    [Fact]
+    public void UnknownLeadingPositionalDoesNotBecomeASubcommand()
+    {
+        // Falls through to flag parsing; subcommand stays at the default.
+        HostOptions.Parse(["whatever"]).Subcommand.Should().Be(HostSubcommand.Repl);
+    }
 }

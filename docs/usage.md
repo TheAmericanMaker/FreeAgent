@@ -7,21 +7,44 @@ practice, and a few recipes. For the architecture behind it, see
 
 ## Running
 
+The easiest path is the interactive installer (covers prerequisites, builds, installs, and runs
+the provider-config wizard):
+
 ```bash
-export OPENAI_API_KEY=sk-...
-dotnet run --project src/FreeAgent.Host
+./scripts/install.sh
+freeagent                 # in the directory you want as the agent's sandbox
 ```
 
-Or run the built binary directly after `dotnet build FreeAgent.slnx`:
+To re-run only the provider-config wizard later:
 
 ```bash
-./src/FreeAgent.Host/bin/Debug/net10.0/FreeAgent.Host
+freeagent setup
+```
+
+The wizard asks which provider you want, prompts for credentials (API-key input is hidden), and
+writes `~/.config/freeagent/config.json` with `chmod 600`. Re-running it preserves sections for
+other providers, so you can keep `openai` and `anthropic` configured at the same time and switch
+between them with `FREEPROVIDER`.
+
+From source without installing:
+
+```bash
+export OPENAI_API_KEY=sk-...      # or any provider-specific env var; see below
+dotnet run --project src/FreeAgent.Host
 ```
 
 To pass flags through `dotnet run`, put them after `--`:
 
 ```bash
 dotnet run --project src/FreeAgent.Host -- --verbose
+dotnet run --project src/FreeAgent.Host -- setup     # invoke the wizard from source
+```
+
+To remove the global tool:
+
+```bash
+./scripts/uninstall.sh           # guided — asks before touching state
+./scripts/uninstall.sh --purge   # tool + ~/.config/freeagent + ~/.cache/freeagent, no prompts
 ```
 
 ## The working directory is the sandbox

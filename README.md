@@ -62,25 +62,51 @@ The largest is OpenAIProvider.cs at 307 lines …
 ## Install
 
 Requires the **.NET 10 SDK** (the repo pins `10.0.100` via `global.json` with
-`rollForward: latestMinor`). Install the `freeagent` command as a .NET global tool:
+`rollForward: latestMinor`). The interactive installer takes care of everything else:
 
 ```bash
-# From a published release (once available on NuGet):
-dotnet tool install --global FreeAgent
-
-# Or from a local checkout:
-./scripts/install.sh        # packs + installs/updates the global tool
-
-freeagent --version
-freeagent --help
+git clone https://github.com/TheAmericanMaker/FreeAgent.git
+cd FreeAgent
+./scripts/install.sh
 ```
 
-If the command isn't found, add the tools directory to your `PATH`:
-`export PATH="$PATH:$HOME/.dotnet/tools"`.
+The installer runs a few pre-flight checks (`.NET 10` SDK present, `~/.dotnet/tools` on `PATH`),
+builds + packs + installs the `freeagent` global tool, then hands off to **`freeagent setup`** —
+a wizard that asks which provider you want, prompts for credentials (API key input is masked),
+and writes `~/.config/freeagent/config.json` with mode `600`. Re-run `freeagent setup` any time
+you want to switch providers or add another one alongside the current default.
+
+Other modes if you'd rather not be prompted:
+
+```bash
+./scripts/install.sh --non-interactive   # build + install only; no prompts, no wizard
+./scripts/install.sh --skip-setup        # interactive install but don't run the wizard
+dotnet tool install --global FreeAgent   # once a release lands on NuGet
+```
+
+To remove it later:
+
+```bash
+./scripts/uninstall.sh           # guided — asks before touching state
+./scripts/uninstall.sh --purge   # remove the tool AND ~/.config/freeagent + ~/.cache/freeagent
+```
+
+Verify the install and explore:
+
+```bash
+freeagent --version
+freeagent --help            # subcommands + flags
+freeagent                   # start a session in the current directory
+```
+
+If `freeagent` isn't found after install, the installer probably appended
+`export PATH="$PATH:$HOME/.dotnet/tools"` to your shell profile but the running shell hasn't
+picked it up yet — restart your shell or `source ~/.zshrc` / `~/.bashrc` / `~/.profile`.
 
 Then, from **any project directory**, just run:
 
 ```bash
+# If you skipped 'freeagent setup', you can still configure providers with env vars:
 export OPENAI_API_KEY=sk-...   # or put it in the config file (see Configuration)
 cd ~/code/my-project
 freeagent
