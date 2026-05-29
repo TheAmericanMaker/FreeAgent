@@ -34,6 +34,26 @@ public sealed class PermissionConfigTests
     }
 
     [Fact]
+    public void ApplyToWithoutGrantsSkipsAllowRulesButKeepsDenyRules()
+    {
+        var engine = new PermissionEngine();
+        var procTool = new FakeTool("ProcessExec", _ => ToolResult.Success("x"));
+
+        PermissionConfig.Parse("""
+            {
+              "allow": [ { "capability": "FileWriteCap" } ],
+              "allowTools": ["WriteFile"],
+              "deny": [ { "capability": "ProcessExecCap", "pattern": "rm" } ]
+            }
+            """).ApplyTo(engine, includeGrants: false);
+
+        // The allow grant was skipped → an out-of-workspace write is still not permitted.
+        engine.Decide(WriteTool, [new FileWriteCap("/var/data/out.txt")], WorkingDir).Allowed.Should().BeFalse();
+        // The deny rule still applies → rm stays blocked.
+        engine.Decide(procTool, [new ProcessExecCap("rm", ["-rf", "/"])], WorkingDir).Allowed.Should().BeFalse();
+    }
+
+    [Fact]
     public void DenyToolBeatsAnAllowRule()
     {
         var engine = new PermissionEngine();

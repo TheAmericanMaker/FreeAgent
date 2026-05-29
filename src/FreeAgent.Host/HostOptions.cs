@@ -10,7 +10,8 @@ public sealed record HostOptions(
     string? ResumeId,
     bool Help,
     bool Version,
-    HostSubcommand Subcommand = HostSubcommand.Repl)
+    HostSubcommand Subcommand = HostSubcommand.Repl,
+    bool Trust = false)
 {
     /// <summary>
     /// Recognises a leading subcommand (<c>setup</c>) plus <c>--help</c>/<c>-h</c>,
@@ -24,6 +25,7 @@ public sealed record HostOptions(
         string? resumeId = null;
         var help = false;
         var version = false;
+        var trust = false;
         var subcommand = HostSubcommand.Repl;
 
         // First positional token (no leading dash) is treated as a subcommand if it's recognized.
@@ -35,6 +37,10 @@ public sealed record HostOptions(
             {
                 case "setup":
                     subcommand = HostSubcommand.Setup;
+                    startIndex = 1;
+                    break;
+                case "trust":
+                    subcommand = HostSubcommand.Trust;
                     startIndex = 1;
                     break;
             }
@@ -53,6 +59,9 @@ public sealed record HostOptions(
                 case "--verbose" or "-v":
                     verbose = true;
                     break;
+                case "--trust":
+                    trust = true;
+                    break;
                 case "--resume":
                     resume = true;
                     if (i + 1 < args.Length && !args[i + 1].StartsWith('-'))
@@ -61,7 +70,7 @@ public sealed record HostOptions(
             }
         }
 
-        return new HostOptions(verbose, resume, resumeId, help, version, subcommand);
+        return new HostOptions(verbose, resume, resumeId, help, version, subcommand, trust);
     }
 }
 
@@ -72,4 +81,6 @@ public enum HostSubcommand
     Repl,
     /// <summary>Run the interactive provider-config wizard (<c>freeagent setup</c>).</summary>
     Setup,
+    /// <summary>Trust the current directory's executable config (<c>freeagent trust</c>), then exit.</summary>
+    Trust,
 }

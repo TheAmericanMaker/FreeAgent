@@ -68,16 +68,26 @@ public sealed class PermissionConfig
         }
     }
 
-    public void ApplyTo(PermissionEngine engine)
+    /// <summary>
+    /// Applies the config's rules to <paramref name="engine"/>. When <paramref name="includeGrants"/>
+    /// is false, the privilege-granting rules (<c>allowTools</c> / <c>allow</c>) are skipped and only
+    /// the restricting rules (<c>denyTools</c> / <c>deny</c>) are applied — used for a project whose
+    /// directory the user has not trusted, so a checked-in config cannot silently widen permissions.
+    /// </summary>
+    public void ApplyTo(PermissionEngine engine, bool includeGrants = true)
     {
-        foreach (var tool in AllowTools ?? []) engine.AllowTool(tool);
-        foreach (var tool in DenyTools ?? []) engine.DenyTool(tool);
-
-        foreach (var rule in Allow ?? [])
+        if (includeGrants)
         {
-            if (IsWholeType(rule.Pattern)) engine.AllowCapabilityType(rule.Capability);
-            else engine.AllowCapabilityRule(rule.Capability, rule.Pattern!);
+            foreach (var tool in AllowTools ?? []) engine.AllowTool(tool);
+
+            foreach (var rule in Allow ?? [])
+            {
+                if (IsWholeType(rule.Pattern)) engine.AllowCapabilityType(rule.Capability);
+                else engine.AllowCapabilityRule(rule.Capability, rule.Pattern!);
+            }
         }
+
+        foreach (var tool in DenyTools ?? []) engine.DenyTool(tool);
 
         foreach (var rule in Deny ?? [])
         {

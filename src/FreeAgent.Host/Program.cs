@@ -28,6 +28,16 @@ public static class Program
             return;
         }
 
+        // `freeagent trust` — remember the current directory as trusted so its .freeagent hooks,
+        // MCP/LSP servers, and allow-rules run without prompting in future sessions.
+        if (options.Subcommand == HostSubcommand.Trust)
+        {
+            ProjectTrust.Trust(Environment.CurrentDirectory);
+            Console.WriteLine($"✓ Trusted {Environment.CurrentDirectory}.");
+            Console.WriteLine("  Its .freeagent hooks, MCP/LSP servers, and allow-rules will run from now on.");
+            return;
+        }
+
         var workingDir = Environment.CurrentDirectory;
         var providerConfig = ProviderConfig.Load();
         var providerName = providerConfig.ResolveProvider();
@@ -94,8 +104,23 @@ public static class Program
         };
         var registry = new ToolRegistry();
         var permissions = new PermissionEngine();
-        var projectConfig = LoadProjectConfig(permissions, workingDir);
-        var hookRunner = new HookRunner(projectConfig?.Hooks, new BashShellExecutor());
+
+        // Workspace trust: a project's .freeagent config can run code (hooks, MCP/LSP servers) and
+        // grant privileges (allow rules). Honor that content only for a trusted directory; otherwise
+        // apply deny-rules only and skip the executable surfaces, so opening a cloned repo can't
+        // silently execute its checked-in config. Deny rules always apply.
+        var projectConfig = ParseProjectConfig(workingDir);
+        var trusted = ResolveTrust(projectConfig, workingDir, options.Trust);
+        if (projectConfig is not null)
+        {
+            projectConfig.ApplyTo(permissions, includeGrants: trusted);
+            if (projectConfig.RuleCount > 0)
+                Console.WriteLine($"Loaded {projectConfig.RuleCount} permission rule(s) from {ProjectConfigPath(workingDir)}"
+                    + (trusted ? "" : " (allow-rules skipped — directory not trusted)"));
+        }
+
+        // Hooks only run when the directory is trusted (null config ⇒ all hook seams are no-ops).
+        var hookRunner = new HookRunner(trusted ? projectConfig?.Hooks : null, new BashShellExecutor());
         var artifactStore = new InMemoryArtifactStore();
         var pipeline = new ToolPipeline(
             registry,
@@ -125,14 +150,15 @@ public static class Program
         registry.Register(new ReadArtifactTool(artifactStore));
 
         // MCP servers (if any) — spawn each, discover tools, register them as mcp__name__tool.
+        // Skipped for an untrusted directory: spawning is arbitrary process execution.
         var mcpManager = new McpServerManager();
-        if (projectConfig?.Mcp?.Servers is { Count: > 0 } mcpServers)
+        if (trusted && projectConfig?.Mcp?.Servers is { Count: > 0 } mcpServers)
             await mcpManager.StartAsync(mcpServers, registry, default);
 
         // LSP servers (if any) — spawn each, run initialize, register four tools per server:
-        // lsp__{name}__{hover|definition|references|open}.
+        // lsp__{name}__{hover|definition|references|open}. Also skipped when untrusted.
         var lspManager = new LspServerManager();
-        if (projectConfig?.Lsp?.Servers is { Count: > 0 } lspServers)
+        if (trusted && projectConfig?.Lsp?.Servers is { Count: > 0 } lspServers)
             await lspManager.StartAsync(lspServers, registry, workingDirectory: workingDir, default);
 
         // Sub-agents — restricted-tool roles that the main agent can spawn for sub-tasks.
@@ -317,14 +343,20 @@ public static class Program
             USAGE
               freeagent [options]            Start the REPL in the current directory.
               freeagent setup                Run the interactive provider-config wizard.
+              freeagent trust                Trust the current directory's .freeagent config.
 
             Run the REPL from the directory you want the agent to work in; that directory is its
             sandbox. First time? Run 'freeagent setup' to pick a provider and write the config.
+
+            A project's .freeagent config can run code on launch (hooks, MCP/LSP servers) and grant
+            extra permissions. The first time you open such a project you're asked to trust it; until
+            then those run only after you approve. Use 'freeagent trust' or --trust to pre-approve.
 
             OPTIONS
               -h, --help        Show this help and exit.
                   --version     Show the version and exit.
               -v, --verbose     Stream the model's reasoning (dimmed) and per-turn token usage.
+                  --trust       Trust this directory's .freeagent config for this run.
                   --resume [id] Resume the session in ./session.jsonl (optionally requiring its id).
 
             PROMPT COMMANDS (during REPL — type /help for the full list)
@@ -383,31 +415,89 @@ public static class Program
         }
     }
 
-    /// <summary>
-    /// Loads <c>.freeagent/config.json</c> (or <c>$FREEAGENT_CONFIG</c>): applies permission rules
-    /// to the engine and returns the parsed config so the host can also wire its hooks. A missing
-    /// file returns null; a malformed one is a non-fatal warning that never blocks startup.
-    /// </summary>
-    private static PermissionConfig? LoadProjectConfig(PermissionEngine permissions, string workingDir)
+    /// <summary>Path of the project config (<c>$FREEAGENT_CONFIG</c> or <c>.freeagent/config.json</c>).</summary>
+    private static string ProjectConfigPath(string workingDir)
     {
         var path = Environment.GetEnvironmentVariable("FREEAGENT_CONFIG");
-        if (string.IsNullOrWhiteSpace(path))
-            path = Path.Combine(workingDir, ".freeagent", "config.json");
+        return string.IsNullOrWhiteSpace(path) ? Path.Combine(workingDir, ".freeagent", "config.json") : path;
+    }
 
+    /// <summary>
+    /// Parses <c>.freeagent/config.json</c> (or <c>$FREEAGENT_CONFIG</c>) without applying it — the
+    /// caller decides what to apply based on trust. A missing file returns null; a malformed one is a
+    /// non-fatal warning that never blocks startup.
+    /// </summary>
+    private static PermissionConfig? ParseProjectConfig(string workingDir)
+    {
+        var path = ProjectConfigPath(workingDir);
         if (!File.Exists(path))
             return null;
 
         try
         {
-            var config = PermissionConfig.Parse(File.ReadAllText(path));
-            config.ApplyTo(permissions);
-            Console.WriteLine($"Loaded {config.RuleCount} permission rule(s) from {path}");
-            return config;
+            return PermissionConfig.Parse(File.ReadAllText(path));
         }
         catch (Exception ex) when (ex is JsonException or ArgumentException or IOException or UnauthorizedAccessException)
         {
             Console.Error.WriteLine($"Warning: ignoring config '{path}': {ex.Message}");
             return null;
+        }
+    }
+
+    /// <summary>
+    /// Decides whether the project's executable/privilege config should be honored. True when the
+    /// config has nothing privileged, when trust is forced (<c>--trust</c> / <c>FREEAGENT_TRUST</c>),
+    /// when the directory is already remembered as trusted, or when the user approves the prompt.
+    /// </summary>
+    private static bool ResolveTrust(PermissionConfig? config, string workingDir, bool trustFlag)
+    {
+        if (config is null)
+            return true;
+
+        var requests = ProjectTrust.DescribeRequests(config);
+        if (requests.Count == 0)
+            return true; // only deny rules / nothing executable — no trust decision needed
+
+        if (trustFlag || Environment.GetEnvironmentVariable("FREEAGENT_TRUST") is "1" or "true")
+            return true;
+
+        if (ProjectTrust.IsTrusted(workingDir))
+            return true;
+
+        return PromptForTrust(workingDir, requests);
+    }
+
+    /// <summary>
+    /// Prompts the user to trust the current directory's executable config. Fails closed when stdin
+    /// isn't interactive (so an automated/piped run never silently executes a cloned repo's config).
+    /// </summary>
+    private static bool PromptForTrust(string workingDir, IReadOnlyList<string> requests)
+    {
+        if (Console.IsInputRedirected)
+        {
+            Console.Error.WriteLine(
+                $"[freeagent] {workingDir} has an untrusted .freeagent config; skipping its hooks, MCP/LSP servers, "
+                + "and allow-rules (non-interactive). Run 'freeagent trust' here to enable them.");
+            return false;
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("⚠ This project's .freeagent config wants to:");
+        foreach (var request in requests)
+            Console.WriteLine($"    • {request}");
+        Console.Write("Trust this directory? [y]es once / [a]lways / [N]o › ");
+
+        switch (Console.In.ReadLine()?.Trim().ToLowerInvariant())
+        {
+            case "a" or "always":
+                ProjectTrust.Trust(workingDir);
+                Console.WriteLine($"  ✓ Trusted {workingDir} (saved).");
+                return true;
+            case "y" or "yes" or "o" or "once":
+                return true;
+            default:
+                Console.WriteLine("  Not trusted — hooks, MCP/LSP servers, and allow-rules are disabled this session.");
+                return false;
         }
     }
 

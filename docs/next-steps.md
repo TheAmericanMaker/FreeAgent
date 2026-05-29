@@ -13,15 +13,19 @@ Checked items are already done on this branch; unchecked are the work to pick up
 
 ## High priority — security (need a small design, then implement)
 
-### 1. Trust gate for project-executable config  ⟵ start here
-A checked-in `.freeagent/config.json` runs code on launch: `SessionStart` hooks via
-`bash -c` (`Host/Program.cs:181`) and MCP/LSP servers auto-spawned
-(`Host/McpServerManager.cs`, `Host/LspServerManager.cs`), all before any prompt.
-- [ ] Decide where trust is remembered (e.g. `$XDG_CONFIG_HOME/freeagent/trusted-dirs`).
-- [ ] On startup, if the working dir's config declares hooks/MCP/LSP commands and the
-      dir is untrusted, prompt once ("This project wants to run … — trust it?").
-- [ ] Skip hook/MCP/LSP launch when untrusted; remember an explicit "trust".
-- [ ] Add a `--trust` / `freeagent trust` non-interactive escape hatch and tests.
+### 1. Trust gate for project-executable config  ✅ done
+A checked-in `.freeagent/config.json` ran code on launch: `SessionStart` hooks via
+`bash -c` and MCP/LSP servers auto-spawned, all before any prompt.
+- [x] Trust remembered per absolute dir in `$XDG_CONFIG_HOME/freeagent/trusted.json` (`ProjectTrust`).
+- [x] On startup, if the config declares hooks/MCP/LSP/allow-grants and the dir is
+      untrusted, prompt once (`[y]es once / [a]lways / [N]o`, default No).
+- [x] When untrusted: skip hook/MCP/LSP launch **and** skip allow-grants
+      (`PermissionConfig.ApplyTo(includeGrants:false)`); deny-rules still apply.
+- [x] Escape hatches: `freeagent trust` subcommand, `--trust` flag, `FREEAGENT_TRUST=1`;
+      non-TTY fails closed. Tests cover parsing, `DescribeRequests`, the trust round-trip,
+      and grant-skipping.
+- [ ] Follow-up: re-prompt when a trusted directory's config *changes* (hash-pin), rather
+      than trusting the path forever.
 
 ### 2. Harden the protocol server defaults (`FreeAgent.Server`)
 Today: open unless `FREEAGENT_SERVER_API_KEY` is set, not pinned to loopback,

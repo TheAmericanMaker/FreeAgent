@@ -99,4 +99,25 @@ public sealed class HostOptionsTests
         // Falls through to flag parsing; subcommand stays at the default.
         HostOptions.Parse(["whatever"]).Subcommand.Should().Be(HostSubcommand.Repl);
     }
+
+    [Fact]
+    public void TrustSubcommandIsRecognized()
+    {
+        HostOptions.Parse(["trust"]).Subcommand.Should().Be(HostSubcommand.Trust);
+        HostOptions.Parse(["TRUST"]).Subcommand.Should().Be(HostSubcommand.Trust);
+    }
+
+    [Fact]
+    public void TrustFlagRecognised()
+    {
+        var options = HostOptions.Parse(["--trust"]);
+        options.Trust.Should().BeTrue();
+        options.Subcommand.Should().Be(HostSubcommand.Repl);
+    }
+
+    [Fact]
+    public void TrustDefaultsFalse()
+    {
+        HostOptions.Parse([]).Trust.Should().BeFalse();
+    }
 }

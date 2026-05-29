@@ -6,6 +6,18 @@ All notable changes to FreeAgent are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added — workspace trust (project-config security gate)
+
+- **Directory trust for executable project config** — a project's `.freeagent/config.json` can run
+  code on launch (SessionStart/pre/post hooks via `bash -c`, MCP/LSP server processes) and grant
+  extra privileges (allow rules). These are now honored only for a **trusted** working directory.
+  The first time you open an untrusted project whose config declares any of them, FreeAgent prompts
+  `[y]es once / [a]lways / [N]o` (default No); until trusted, hooks/MCP/LSP are skipped and
+  allow-rules are not applied (deny-rules always apply, and the agent still works via the interactive
+  approver). Trust is remembered per absolute path in `$XDG_CONFIG_HOME/freeagent/trusted.json`.
+  Escape hatches: a `freeagent trust` subcommand, a `--trust` flag, and `FREEAGENT_TRUST=1`;
+  non-interactive (piped) runs fail closed. Closes the "open a cloned repo → code execution" hole.
+
 ### Fixed / Security — from the project review
 
 - **Thread-safe cache + artifact store** — `InMemoryToolResultCache` and `InMemoryArtifactStore` now
