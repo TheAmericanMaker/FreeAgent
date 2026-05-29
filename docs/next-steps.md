@@ -1,0 +1,64 @@
+# Next steps — review follow-ups
+
+Actionable backlog distilled from `docs/review-recommendations.md`. Ordered by priority.
+Checked items are already done on this branch; unchecked are the work to pick up next.
+
+## Already fixed (this branch)
+- [x] Thread-safe `InMemoryToolResultCache` + `InMemoryArtifactStore` (`ConcurrentDictionary`)
+- [x] Dispose provider `HttpResponseMessage` (+ Bedrock event-stream) across all 6 adapters
+- [x] `find` auto-allowed only without a destructive action (`-delete`/`-exec`/…) + tests
+- [x] MCP `tools/call` honors `isError` (maps to an error result) + test
+- [x] Grep regex 2s match-timeout (ReDoS guard)
+- [x] CI workflow (`.github/workflows/ci.yml`) — build + test on push/PR
+
+## High priority — security (need a small design, then implement)
+
+### 1. Trust gate for project-executable config  ⟵ start here
+A checked-in `.freeagent/config.json` runs code on launch: `SessionStart` hooks via
+`bash -c` (`Host/Program.cs:181`) and MCP/LSP servers auto-spawned
+(`Host/McpServerManager.cs`, `Host/LspServerManager.cs`), all before any prompt.
+- [ ] Decide where trust is remembered (e.g. `$XDG_CONFIG_HOME/freeagent/trusted-dirs`).
+- [ ] On startup, if the working dir's config declares hooks/MCP/LSP commands and the
+      dir is untrusted, prompt once ("This project wants to run … — trust it?").
+- [ ] Skip hook/MCP/LSP launch when untrusted; remember an explicit "trust".
+- [ ] Add a `--trust` / `freeagent trust` non-interactive escape hatch and tests.
+
+### 2. Harden the protocol server defaults (`FreeAgent.Server`)
+Today: open unless `FREEAGENT_SERVER_API_KEY` is set, not pinned to loopback,
+non-constant-time key compare, no session cap (`Server/Program.cs`).
+- [ ] Bind to `127.0.0.1` by default; require an explicit flag/env to expose publicly.
+- [ ] Require auth by default (or refuse to bind non-loopback without a key).
+- [ ] Constant-time key comparison (`CryptographicOperations.FixedTimeEquals`).
+- [ ] Cap concurrent sessions + idle eviction; serialize turns per session.
+- [ ] Add the missing SSE turn tests (framing, flush, cancellation, disconnect).
+
+### 3. Symlink workspace-boundary canonicalization
+Lexical `Path.GetFullPath` only (`Tools/Adapters/WorkspacePath.cs`,
+`PermissionEngine.IsInsideWorkingDirectory`) → a symlink inside the workspace escapes
+reads/writes.
+- [ ] Resolve real paths at the pipeline `sanity-check` seam via a filesystem
+      abstraction (keep `PermissionEngine` pure per ADR 0004).
+- [ ] Reject a resolved target outside the workspace / under a protected prefix.
+- [ ] Add a symlink-fixture regression test.
+
+## Medium priority — correctness
+- [ ] SSE adapters: guard `JsonDocument.Parse` per `data:` line so one malformed line
+      doesn't abort the turn (match Ollama's try/skip).
+- [ ] Compaction: reset `LastInputTokens` after compacting so it can't re-fire every
+      turn when the next response reports no usage.
+- [ ] Server: serialize concurrent turns per session; make SSE writes async so a slow
+      client can't block the agent loop.
+- [ ] `ProcessExecCap`: consider matching args, not just the binary, in allow-rules.
+- [ ] Providers/`/serve`: require `https://` (or explicit opt-in) for base URLs and
+      model-download sources.
+
+## Low priority — polish
+- [ ] Crash-atomic writes for `WriteFile` / `ApplyPatch` / `MultiEdit` via
+      `IAtomicFileSystem` (temp-write → rename).
+- [ ] Doom-loop budget off-by-one vs its "(attempt N of 3)" message.
+- [ ] `JsonlSessionStore` in-memory fallback can mask a deleted file on resume.
+- [ ] LSP header read is byte-at-a-time; add a write gate like the MCP transport.
+- [ ] Cancelled JSON-RPC call leaves a stale `_pending` entry.
+- [ ] `ModelServerLauncher` PID-reuse race in `IsAlive`/`Stop`.
+- [ ] Parse OpenAI `cached_tokens` usage (advertised in `Usage` but never read).
+- [ ] Remove the duplicate stream-complete sentinel in the OpenAI-compat parser.
