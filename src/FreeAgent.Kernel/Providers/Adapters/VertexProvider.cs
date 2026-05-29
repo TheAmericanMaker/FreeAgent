@@ -69,7 +69,7 @@ public sealed class VertexProvider : IProvider, IDisposable
         using var httpRequest = new HttpRequestMessage(HttpMethod.Post, url) { Content = httpContent };
         httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
-        var response = await _httpClient.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+        using var response = await _httpClient.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
         {
             var err = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);

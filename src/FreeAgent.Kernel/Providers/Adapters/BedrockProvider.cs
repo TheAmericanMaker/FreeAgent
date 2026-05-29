@@ -72,7 +72,7 @@ public sealed class BedrockProvider : IProvider, IDisposable
             Body = new MemoryStream(Encoding.UTF8.GetBytes(body)),
         };
 
-        var response = await _client.InvokeModelWithResponseStreamAsync(invokeRequest, cancellationToken);
+        using var response = await _client.InvokeModelWithResponseStreamAsync(invokeRequest, cancellationToken);
 
         var toolUseByIndex = new Dictionary<int, (string Id, string Name)>();
         var finalStopReason = StopReason.Unknown;

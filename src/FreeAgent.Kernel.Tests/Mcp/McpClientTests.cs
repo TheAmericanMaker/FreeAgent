@@ -78,12 +78,22 @@ public sealed class McpClientTests
               {"type":"image","data":"…"}
             ],"isError":false}
             """));
-        var text = await client.CallToolAsync("greet", "{\"name\":\"Alice\"}", CancellationToken.None);
+        var call = await client.CallToolAsync("greet", "{\"name\":\"Alice\"}", CancellationToken.None);
 
-        text.Should().Be("hello world");
+        call.Text.Should().Be("hello world");
+        call.IsError.Should().BeFalse();
         // Written sequence: initialize, notifications/initialized, tools/list, tools/call.
         transport.Written[3].Should().Contain("\"method\":\"tools/call\"")
             .And.Contain("\"name\":\"greet\"")
             .And.Contain("\"name\":\"Alice\"");
+
+        // tools/call (id=4) — a server-reported failure surfaces via IsError instead of a silent success.
+        transport.EnqueueResponse(ResultEnvelope(4, """
+            {"content":[{"type":"text","text":"boom"}],"isError":true}
+            """));
+        var failed = await client.CallToolAsync("greet", "{}", CancellationToken.None);
+
+        failed.IsError.Should().BeTrue();
+        failed.Text.Should().Be("boom");
     }
 }

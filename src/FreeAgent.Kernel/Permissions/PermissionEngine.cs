@@ -29,16 +29,24 @@ public sealed class PermissionEngine : IPermissionEngine
         "/etc/", "/usr/", "/bin/", "/sbin/", "/System/", "/Library/"
     };
 
-    // Read-only binaries that are auto-allowed.
+    // Read-only binaries that are auto-allowed. NOTE: `find` is deliberately NOT here — it is only
+    // read-only without a destructive action (see FindHasNoDestructiveAction), so it is special-cased.
     private static readonly HashSet<string> SafeReadOnlyBinaries = new(StringComparer.Ordinal)
     {
-        "pwd", "ls", "cat", "head", "tail", "grep", "rg", "find"
+        "pwd", "ls", "cat", "head", "tail", "grep", "rg"
     };
 
     // Read-only git subcommands that are auto-allowed (binary "git" + this first arg).
     private static readonly HashSet<string> SafeGitSubcommands = new(StringComparer.Ordinal)
     {
         "status", "diff", "log"
+    };
+
+    // `find` actions that mutate the filesystem or run arbitrary commands. Their presence means the
+    // call is not read-only and must go through approval rather than the auto-allow path.
+    private static readonly HashSet<string> FindDestructiveActions = new(StringComparer.Ordinal)
+    {
+        "-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprint", "-fprint0", "-fprintf", "-fls"
     };
 
     private readonly HashSet<string> _deniedTools = new(StringComparer.Ordinal);
@@ -142,9 +150,25 @@ public sealed class PermissionEngine : IPermissionEngine
     {
         var name = BinaryName(exec.Binary);
         if (SafeReadOnlyBinaries.Contains(name)) return true;
-        return string.Equals(name, "git", StringComparison.Ordinal)
-            && exec.Args.Count >= 1
-            && SafeGitSubcommands.Contains(exec.Args[0]);
+        if (string.Equals(name, "git", StringComparison.Ordinal))
+            return exec.Args.Count >= 1 && SafeGitSubcommands.Contains(exec.Args[0]);
+        // `find` is read-only only when it carries no destructive/command-running action.
+        if (string.Equals(name, "find", StringComparison.Ordinal))
+            return FindHasNoDestructiveAction(exec.Args);
+        return false;
+    }
+
+    private static bool FindHasNoDestructiveAction(IReadOnlyList<string> args)
+    {
+        foreach (var arg in args)
+        {
+            if (FindDestructiveActions.Contains(arg))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static bool IsBlockedBinary(string binary) => BlockedBinaries.Contains(BinaryName(binary));

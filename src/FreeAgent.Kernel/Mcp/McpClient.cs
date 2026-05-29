@@ -62,10 +62,11 @@ public sealed class McpClient : IAsyncDisposable
 
     /// <summary>
     /// Invokes <c>tools/call</c>. <paramref name="argumentsJson"/> is embedded as the <c>arguments</c>
-    /// object directly. Returns the concatenated text from the result's content blocks (any
-    /// non-text block types are skipped for v1).
+    /// object directly. Returns the concatenated text from the result's content blocks (any non-text
+    /// block types are skipped for v1) together with the result's <c>isError</c> flag, so the adapter
+    /// can map an MCP-reported tool failure to an error result rather than a silent success.
     /// </summary>
-    public async Task<string> CallToolAsync(string name, string argumentsJson, CancellationToken cancellationToken)
+    public async Task<McpToolCallResult> CallToolAsync(string name, string argumentsJson, CancellationToken cancellationToken)
     {
         var result = await _rpc.CallAsync("tools/call", w =>
         {
@@ -83,8 +84,10 @@ public sealed class McpClient : IAsyncDisposable
             }
         }, cancellationToken);
 
+        var isError = result.TryGetProperty("isError", out var errorFlag) && errorFlag.ValueKind == JsonValueKind.True;
+
         if (!result.TryGetProperty("content", out var content) || content.ValueKind != JsonValueKind.Array)
-            return string.Empty;
+            return new McpToolCallResult(isError, string.Empty);
 
         var sb = new StringBuilder();
         foreach (var block in content.EnumerateArray())
@@ -96,8 +99,15 @@ public sealed class McpClient : IAsyncDisposable
                 sb.Append(text.GetString());
             }
         }
-        return sb.ToString();
+        return new McpToolCallResult(isError, sb.ToString());
     }
 
     public ValueTask DisposeAsync() => _rpc.DisposeAsync();
 }
+
+/// <summary>
+/// Outcome of an MCP <c>tools/call</c>: the concatenated text content plus the server's
+/// <c>isError</c> flag. A true flag means the remote tool reported a failure (which the adapter maps
+/// to an error result) rather than a successful call.
+/// </summary>
+public sealed record McpToolCallResult(bool IsError, string Text);

@@ -142,6 +142,29 @@ public sealed class PermissionEngineContractTests
         engine.Decide(Tool(), [new ProcessExecCap("git", ["push"])], WorkDir).Allowed.Should().BeFalse();
     }
 
+    [Fact]
+    public void ReadOnlyFindIsAutoAllowed()
+    {
+        var engine = new PermissionEngine();
+
+        engine.Decide(Tool(), [new ProcessExecCap("find", [".", "-name", "*.cs"])], WorkDir).Allowed.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("-delete")]
+    [InlineData("-exec")]
+    [InlineData("-execdir")]
+    [InlineData("-ok")]
+    public void DestructiveFindIsNotAutoAllowed(string action)
+    {
+        var engine = new PermissionEngine();
+
+        var decision = engine.Decide(Tool(), [new ProcessExecCap("find", [".", action, "rm", "{}", ";"])], WorkDir);
+
+        decision.Allowed.Should().BeFalse();
+        decision.Outcome.Should().Be(PermissionOutcome.Prompt);
+    }
+
     // ── I. Dangerous ProcessExecCap always denies ────────────────────────────
 
     [Theory]

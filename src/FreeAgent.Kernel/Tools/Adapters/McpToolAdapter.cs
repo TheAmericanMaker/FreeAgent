@@ -43,10 +43,18 @@ public sealed class McpToolAdapter : ITool
     {
         try
         {
-            var text = await _client.CallToolAsync(_remoteName, arguments.RootElement.GetRawText(), cancellationToken);
-            return string.IsNullOrWhiteSpace(text)
+            var call = await _client.CallToolAsync(_remoteName, arguments.RootElement.GetRawText(), cancellationToken);
+            if (call.IsError)
+            {
+                return ToolResult.Error(
+                    string.IsNullOrWhiteSpace(call.Text)
+                        ? $"MCP tool '{Name}' reported an error."
+                        : $"MCP tool '{Name}' reported an error: {call.Text}");
+            }
+
+            return string.IsNullOrWhiteSpace(call.Text)
                 ? ToolResult.Empty($"MCP tool '{Name}' produced no output.")
-                : ToolResult.Success(text);
+                : ToolResult.Success(call.Text);
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)

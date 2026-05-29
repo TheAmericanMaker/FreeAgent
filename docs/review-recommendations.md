@@ -6,6 +6,23 @@ build and the ~500-test suite were not run here; findings are from reading the c
 Subsystems were reviewed in parallel; the highest-severity items below were then
 verified firsthand._
 
+## Implementation status
+
+Fixed on this branch since the review: **#5** (cache/artifact `ConcurrentDictionary`),
+**#6** (provider HTTP-response disposal), **#4** (`find` destructive-arg hardening,
+with tests), **#8** (MCP `isError` mapping, with a test), **#12** (Grep ReDoS
+match-timeout), and the **CI workflow** gap. The larger, design-bearing security
+items are intentionally **still open** pending a decision, because each needs a
+product/architecture call rather than a contained patch:
+
+- **#1 — trust gate for project-executable config** (SessionStart hooks + MCP/LSP
+  auto-launch): needs a "trust this directory?" UX and a place to remember the
+  decision.
+- **#2 — server hardening** (default loopback bind, auth-by-default, constant-time
+  compare, session cap): changes default behavior and needs an opt-out flag design.
+- **#3 — symlink boundary canonicalization**: belongs at the pipeline `sanity-check`
+  seam via a filesystem abstraction, to keep `PermissionEngine` pure (ADR 0004).
+
 ## Overall assessment
 
 `dev` has grown enormously beyond the kernel I first saw — four projects now

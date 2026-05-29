@@ -1,12 +1,15 @@
+using System.Collections.Concurrent;
+
 namespace FreeAgent.Kernel;
 
 /// <summary>
 /// Default in-memory <see cref="IArtifactStore"/>. References are short opaque strings; storage is
-/// per-session (the host constructs one and the artifacts go away when the process ends).
+/// per-session (the host constructs one and the artifacts go away when the process ends). Thread-safe
+/// so the executor's parallel read-only window can offload large results concurrently.
 /// </summary>
 public sealed class InMemoryArtifactStore : IArtifactStore
 {
-    private readonly Dictionary<string, string> _entries = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, string> _entries = new(StringComparer.Ordinal);
 
     public int Count => _entries.Count;
 

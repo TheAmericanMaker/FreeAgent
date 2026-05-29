@@ -59,7 +59,7 @@ public sealed class OpenAIProvider : IProvider, IDisposable
         // ResponseHeadersRead returns as soon as the headers arrive, so the SSE body is read
         // incrementally below. The default (ResponseContentRead) would buffer the entire
         // response before returning, collapsing the stream into a single burst.
-        var response = await _httpClient.SendAsync(
+        using var response = await _httpClient.SendAsync(
             httpRequest,
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken);

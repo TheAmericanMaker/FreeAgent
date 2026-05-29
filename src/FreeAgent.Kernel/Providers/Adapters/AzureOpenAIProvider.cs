@@ -65,7 +65,7 @@ public sealed class AzureOpenAIProvider : IProvider, IDisposable
         var body = OpenAICompatStreaming.BuildRequestBody(_deployment, request);
         using var httpContent = new StringContent(body, Encoding.UTF8, "application/json");
         using var httpRequest = new HttpRequestMessage(HttpMethod.Post, endpoint) { Content = httpContent };
-        var response = await _httpClient.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        using var response = await _httpClient.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
         {

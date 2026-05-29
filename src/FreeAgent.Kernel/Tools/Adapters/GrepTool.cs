@@ -45,7 +45,8 @@ public sealed class GrepTool : ITool
         try
         {
             var options = RegexOptions.CultureInvariant | (ignoreCase ? RegexOptions.IgnoreCase : RegexOptions.None);
-            pattern = new Regex(patternText, options);
+            // Bound per-match work so a catastrophic-backtracking (ReDoS) pattern can't hang the turn.
+            pattern = new Regex(patternText, options, TimeSpan.FromSeconds(2));
         }
         catch (ArgumentException ex)
         {
@@ -79,7 +80,18 @@ public sealed class GrepTool : ITool
             foreach (var line in text.Split('\n'))
             {
                 lineNumber++;
-                if (!pattern.IsMatch(line))
+                bool isMatch;
+                try
+                {
+                    isMatch = pattern.IsMatch(line);
+                }
+                catch (RegexMatchTimeoutException)
+                {
+                    return ToolResult.InvalidInput(
+                        $"Regex '{patternText}' is too expensive to evaluate (match timed out). Use a simpler, more specific pattern.");
+                }
+
+                if (!isMatch)
                     continue;
 
                 if (matches.Count == MaxMatches)

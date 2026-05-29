@@ -6,6 +6,22 @@ All notable changes to FreeAgent are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed / Security — from the project review
+
+- **Thread-safe cache + artifact store** — `InMemoryToolResultCache` and `InMemoryArtifactStore` now
+  use `ConcurrentDictionary`. They are reached from the executor's parallel read-only window through
+  a single shared `ToolPipeline`, where the previous plain `Dictionary` was a data race.
+- **`find` is no longer auto-allowed with a destructive action** — `find` is auto-allowed only without
+  `-delete` / `-exec` / `-execdir` / `-ok` / `-okdir` / `-fprint*` / `-fls`; otherwise it requires
+  approval like any other binary (previously `find . -delete` ran unprompted).
+- **MCP `tools/call` honors `isError`** — `CallToolAsync` returns the `isError` flag and the adapter
+  maps a server-reported failure to an error result instead of a silent `Success`.
+- **Grep regex match-timeout** — model-supplied patterns compile with a 2s match timeout; a
+  catastrophic-backtracking (ReDoS) pattern now returns `InvalidInput` instead of hanging the turn.
+- **Provider HTTP responses are disposed** — OpenAI / Azure / Anthropic / Ollama / Vertex / Bedrock
+  adapters now `using`-dispose the response (and Bedrock's event-stream), closing a socket/connection
+  leak on both the success and error paths.
+
 ### Added — find-callers semantic action
 
 - **`CSharpAnalysis` gains `find-callers`** — walks the call graph outward from the target symbol
