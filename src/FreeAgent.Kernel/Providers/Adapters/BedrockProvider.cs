@@ -72,7 +72,9 @@ public sealed class BedrockProvider : IProvider, IDisposable
             Body = new MemoryStream(Encoding.UTF8.GetBytes(body)),
         };
 
-        using var response = await _client.InvokeModelWithResponseStreamAsync(invokeRequest, cancellationToken);
+        var response = await _client.InvokeModelWithResponseStreamAsync(invokeRequest, cancellationToken);
+        // NOTE: the AWS event-stream response is intentionally not wrapped in `using` — the response
+        // type's IDisposable support varies by SDK version; revisit once a local build can confirm it.
 
         var toolUseByIndex = new Dictionary<int, (string Id, string Name)>();
         var finalStopReason = StopReason.Unknown;
