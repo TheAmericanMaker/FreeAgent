@@ -66,3 +66,16 @@ reads/writes.
 - [ ] `ModelServerLauncher` PID-reuse race in `IsAlive`/`Stop`.
 - [ ] Parse OpenAI `cached_tokens` usage (advertised in `Usage` but never read).
 - [ ] Remove the duplicate stream-complete sentinel in the OpenAI-compat parser.
+
+## Tooling / environment
+
+- [ ] **Ship the dev/CI sandbox with the .NET 10 SDK.** The Claude-Code web sandbox has no
+      `dotnet` and blocks the SDK install mirrors, so changes can't be built or tested locally —
+      they only get a real compile/test signal from GitHub Actions, which is slow and lossy. Add a
+      `.devcontainer` (mcr.microsoft.com/dotnet/sdk:10.0) and/or a SessionStart hook / setup script
+      that provisions the SDK, so the agent can run `dotnet build` / `dotnet test` before pushing.
+- [ ] **Server robustness:** `POST /sessions` eagerly constructs the provider, which previously
+      500'd when no API key was configured (fixed with a placeholder key in `ProviderFactory`).
+      Consider deferring provider creation to the first turn, or validating provider config at
+      startup and returning a clear error, rather than relying on the placeholder.
+

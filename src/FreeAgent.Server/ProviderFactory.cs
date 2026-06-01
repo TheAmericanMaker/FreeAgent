@@ -19,7 +19,11 @@ public sealed class ProviderFactory
         var name = _config.ResolveProvider();
         var settings = _config.SettingsFor(name);
         var baseUrl = settings.BaseUrl!;
-        var apiKey = settings.ApiKey!;
+        // Don't hard-fail session creation when no key is configured (the provider ctors throw on an
+        // empty key). The server creates/lists/deletes sessions without needing a live provider; a
+        // placeholder lets construction succeed and defers any auth failure to the actual turn — unlike
+        // the CLI, which bootstraps the key up front.
+        var apiKey = string.IsNullOrWhiteSpace(settings.ApiKey) ? "unset" : settings.ApiKey;
         var model = settings.Model!;
 
         IProvider provider = name switch
