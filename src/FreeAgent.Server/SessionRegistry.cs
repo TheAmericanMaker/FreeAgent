@@ -15,7 +15,19 @@ public sealed class SessionRegistry
 {
     private readonly ConcurrentDictionary<string, SessionEntry> _sessions = new();
 
-    public sealed record SessionEntry(SessionState State, SessionRuntime Runtime, string WorkingDirectory);
+    /// <summary>
+    /// One live session. <see cref="Gate"/> serializes turns for this session: the runtime and its
+    /// single <see cref="SessionState"/> are not safe to drive from two concurrent <c>POST /turns</c>
+    /// requests (they would race the event-sink swap and the shared message list), so a second turn
+    /// is rejected while one is in flight.
+    /// </summary>
+    public sealed record SessionEntry(SessionState State, SessionRuntime Runtime, string WorkingDirectory)
+    {
+        public SemaphoreSlim Gate { get; } = new(1, 1);
+    }
+
+    /// <summary>Number of live sessions (for the create-time cap).</summary>
+    public int Count => _sessions.Count;
 
     public SessionEntry GetOrAdd(string id, Func<string, SessionEntry> factory) =>
         _sessions.GetOrAdd(id, factory);

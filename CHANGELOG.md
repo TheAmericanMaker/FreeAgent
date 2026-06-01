@@ -6,6 +6,18 @@ All notable changes to FreeAgent are recorded here. The format follows
 
 ## [Unreleased]
 
+### Security — protocol server hardening
+
+- **Safe-by-default networking for `FreeAgent.Server`.** The server now binds to `127.0.0.1` by
+  default (override with `FREEAGENT_SERVER_URLS` / `ASPNETCORE_URLS`) and **refuses to start** on a
+  non-loopback address unless `FREEAGENT_SERVER_API_KEY` is set — an open agent on a routable
+  interface is remote code execution. The bearer-token check is now **constant-time**
+  (`CryptographicOperations.FixedTimeEquals`). Live sessions are **capped**
+  (`FREEAGENT_SERVER_MAX_SESSIONS`, default 256 → `429`), and **turns are serialized per session**
+  (a second concurrent `POST /turns` gets `409`, preventing the event-sink/state race). New pure
+  helpers live in `ServerSecurity`; also fixed `POST /sessions` 500'ing when no provider key is
+  configured (placeholder key, deferring auth failure to the turn).
+
 ### Added — workspace trust (project-config security gate)
 
 - **Directory trust for executable project config** — a project's `.freeagent/config.json` can run

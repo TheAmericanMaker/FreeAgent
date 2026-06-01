@@ -19,10 +19,14 @@ namespace FreeAgent.Server;
 /// </summary>
 public static class SessionEndpoints
 {
-    public static void Map(WebApplication app)
+    public static void Map(WebApplication app, int maxSessions = int.MaxValue)
     {
         app.MapPost("/sessions", (CreateSessionRequest? body, SessionRegistry registry, ProviderFactory factory) =>
         {
+            // Cap live sessions so an (unauthenticated, loopback) client can't exhaust memory/handles.
+            if (registry.Count >= maxSessions)
+                return Results.StatusCode(StatusCodes.Status429TooManyRequests);
+
             var workingDir = string.IsNullOrWhiteSpace(body?.WorkingDirectory)
                 ? Directory.GetCurrentDirectory()
                 : body!.WorkingDirectory!;
@@ -53,6 +57,10 @@ public static class SessionEndpoints
             if (!registry.TryGet(id, out var entry)) { ctx.Response.StatusCode = StatusCodes.Status404NotFound; return; }
             if (string.IsNullOrEmpty(body?.UserInput)) { ctx.Response.StatusCode = StatusCodes.Status400BadRequest; return; }
 
+            // One turn at a time per session: the runtime + its SessionState can't be driven by two
+            // concurrent requests (they'd race the event-sink swap and the shared message list).
+            if (!entry.Gate.Wait(0)) { ctx.Response.StatusCode = StatusCodes.Status409Conflict; return; }
+
             ctx.Response.ContentType = "text/event-stream";
             ctx.Response.Headers.CacheControl = "no-cache";
             ctx.Response.Headers["X-Accel-Buffering"] = "no"; // disable proxy buffering
@@ -76,6 +84,10 @@ public static class SessionEndpoints
             catch (Exception ex)
             {
                 await streamingSink.WriteEventAsync("error", JsonSerializer.Serialize(new { message = ex.Message }));
+            }
+            finally
+            {
+                entry.Gate.Release();
             }
         });
 

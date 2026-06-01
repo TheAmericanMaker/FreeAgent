@@ -128,6 +128,27 @@ public sealed class SessionEndpointsTests : IClassFixture<WebApplicationFactory<
     }
 
     [Fact]
+    public async Task SessionCapReturns429WhenExceeded()
+    {
+        Environment.SetEnvironmentVariable("FREEAGENT_SERVER_MAX_SESSIONS", "1");
+        try
+        {
+            using var factory = new WebApplicationFactory<Program>();
+            var client = factory.CreateClient();
+
+            var first = await client.PostAsJsonAsync("/sessions", new { workingDirectory = "/tmp" });
+            first.StatusCode.Should().Be(HttpStatusCode.Created);
+
+            var second = await client.PostAsJsonAsync("/sessions", new { workingDirectory = "/tmp" });
+            second.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("FREEAGENT_SERVER_MAX_SESSIONS", null);
+        }
+    }
+
+    [Fact]
     public async Task ApiKeyGate_RejectsRequestsWithoutHeader()
     {
         Environment.SetEnvironmentVariable("FREEAGENT_SERVER_API_KEY", "test-key");

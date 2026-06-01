@@ -27,14 +27,17 @@ A checked-in `.freeagent/config.json` ran code on launch: `SessionStart` hooks v
 - [ ] Follow-up: re-prompt when a trusted directory's config *changes* (hash-pin), rather
       than trusting the path forever.
 
-### 2. Harden the protocol server defaults (`FreeAgent.Server`)
-Today: open unless `FREEAGENT_SERVER_API_KEY` is set, not pinned to loopback,
-non-constant-time key compare, no session cap (`Server/Program.cs`).
-- [ ] Bind to `127.0.0.1` by default; require an explicit flag/env to expose publicly.
-- [ ] Require auth by default (or refuse to bind non-loopback without a key).
-- [ ] Constant-time key comparison (`CryptographicOperations.FixedTimeEquals`).
-- [ ] Cap concurrent sessions + idle eviction; serialize turns per session.
-- [ ] Add the missing SSE turn tests (framing, flush, cancellation, disconnect).
+### 2. Harden the protocol server defaults (`FreeAgent.Server`)  ✅ mostly done
+- [x] Bind to `127.0.0.1` by default (`FREEAGENT_SERVER_URLS` / `ASPNETCORE_URLS` to override).
+- [x] Refuse to bind a non-loopback address without `FREEAGENT_SERVER_API_KEY` (`ServerSecurity.BindsBeyondLoopback`).
+- [x] Constant-time key comparison (`ServerSecurity.TokenMatches` → `CryptographicOperations.FixedTimeEquals`).
+- [x] Cap concurrent sessions (`FREEAGENT_SERVER_MAX_SESSIONS`, default 256 → `429`) and serialize
+      turns per session (per-`SessionEntry` `SemaphoreSlim`, second concurrent turn → `409`).
+- [ ] Idle session eviction (TTL) — sessions still live until explicit `DELETE`.
+- [ ] Add the missing SSE turn tests (framing, flush, cancellation, disconnect) — needs a fake
+      provider injected into the test host; `ServerSecurity` + the session-cap path are covered.
+- [ ] Make SSE writes async (the runtime's `IEventSink` callbacks are sync, so a slow client can
+      still block the agent loop — needs an `IEventSink` shape change).
 
 ### 3. Symlink workspace-boundary canonicalization
 Lexical `Path.GetFullPath` only (`Tools/Adapters/WorkspacePath.cs`,
