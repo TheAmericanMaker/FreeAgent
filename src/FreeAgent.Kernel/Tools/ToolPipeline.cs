@@ -25,6 +25,7 @@ public sealed class ToolPipeline
     private readonly IHookRunner? _hooks;
     private readonly IArtifactStore? _artifacts;
     private readonly int _artifactThreshold;
+    private readonly IRealPathResolver? _realPaths;
     private readonly object _stepLogGate = new();
 
     /// <summary>Ordered record of the conceptual steps reached during the last call(s).</summary>
@@ -51,7 +52,8 @@ public sealed class ToolPipeline
         IToolResultCache? cache = null,
         IHookRunner? hooks = null,
         IArtifactStore? artifacts = null,
-        int artifactThreshold = DefaultArtifactThreshold)
+        int artifactThreshold = DefaultArtifactThreshold,
+        IRealPathResolver? realPaths = null)
     {
         _registry = registry;
         _permissions = permissions;
@@ -60,6 +62,7 @@ public sealed class ToolPipeline
         _hooks = hooks;
         _artifacts = artifacts;
         _artifactThreshold = artifactThreshold;
+        _realPaths = realPaths;
     }
 
     public async ValueTask<ToolResult> ExecuteAsync(ToolCall call, SessionState state, CancellationToken cancellationToken)
@@ -118,7 +121,17 @@ public sealed class ToolPipeline
             // decide; an uncovered, denied, or blocked capability stops here before any side effect.
             AddStep("permission");
             var capabilities = tool.RequiredCapabilities(arguments, context);
-            var decision = _permissions.Decide(tool, capabilities, state.WorkingDirectory);
+            // Canonicalize symlinks (step 3 "sanity-check" concern) so the engine's lexical
+            // containment/protection checks see the real target: a link inside the workspace pointing
+            // outside it — or through a protected prefix — is resolved here, before the decision. The
+            // engine itself stays pure/no-I/O (ADR 0004); with no resolver, behavior is unchanged.
+            var workingDirectory = state.WorkingDirectory;
+            if (_realPaths is not null)
+            {
+                workingDirectory = _realPaths.Resolve(workingDirectory);
+                capabilities = CanonicalizeCapabilityPaths(capabilities, _realPaths);
+            }
+            var decision = _permissions.Decide(tool, capabilities, workingDirectory);
             if (decision.Outcome == PermissionOutcome.Deny)
             {
                 return ToolResult.PermissionDenied(decision.Reason, decision.RetryHint);
@@ -258,4 +271,31 @@ public sealed class ToolPipeline
     /// <summary>Stable cache-key form of the arguments — re-serialize so equivalent JSON canonicalises.</summary>
     private static string CanonicalizeJson(JsonDocument arguments) =>
         JsonSerializer.Serialize(arguments.RootElement, JsonOptions.Default);
+
+    /// <summary>
+    /// Returns the capabilities with file paths resolved to their real (symlink-followed) location, so
+    /// the permission engine decides on the true target. Non-path capabilities are passed through; the
+    /// list is only copied if at least one path actually needs rewriting.
+    /// </summary>
+    private static IReadOnlyList<Capability> CanonicalizeCapabilityPaths(IReadOnlyList<Capability> capabilities, IRealPathResolver resolver)
+    {
+        Capability[]? rewritten = null;
+        for (var i = 0; i < capabilities.Count; i++)
+        {
+            Capability? replacement = capabilities[i] switch
+            {
+                FileReadCap read => read with { Path = resolver.Resolve(read.Path) },
+                FileWriteCap write => write with { Path = resolver.Resolve(write.Path) },
+                _ => null,
+            };
+
+            if (replacement is not null)
+            {
+                rewritten ??= capabilities.ToArray();
+                rewritten[i] = replacement;
+            }
+        }
+
+        return rewritten ?? capabilities;
+    }
 }

@@ -128,7 +128,8 @@ public static class Program
             approver: new ConsoleApprover(workingDir),
             cache: new InMemoryToolResultCache(),
             hooks: hookRunner,
-            artifacts: artifactStore);
+            artifacts: artifactStore,
+            realPaths: new RealPathResolver());
         var fs = new LinuxAtomicFileSystem();
         var store = new JsonlSessionStore(fs);
         var events = new ConsoleEventSink(options.Verbose);

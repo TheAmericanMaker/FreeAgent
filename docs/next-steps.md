@@ -39,14 +39,15 @@ A checked-in `.freeagent/config.json` ran code on launch: `SessionStart` hooks v
 - [ ] Make SSE writes async (the runtime's `IEventSink` callbacks are sync, so a slow client can
       still block the agent loop — needs an `IEventSink` shape change).
 
-### 3. Symlink workspace-boundary canonicalization
-Lexical `Path.GetFullPath` only (`Tools/Adapters/WorkspacePath.cs`,
-`PermissionEngine.IsInsideWorkingDirectory`) → a symlink inside the workspace escapes
-reads/writes.
-- [ ] Resolve real paths at the pipeline `sanity-check` seam via a filesystem
-      abstraction (keep `PermissionEngine` pure per ADR 0004).
-- [ ] Reject a resolved target outside the workspace / under a protected prefix.
-- [ ] Add a symlink-fixture regression test.
+### 3. Symlink workspace-boundary canonicalization  ✅ done
+- [x] `IRealPathResolver` (+ `RealPathResolver`) follows symlinks over the longest existing prefix
+      and appends any non-existing remainder lexically.
+- [x] `ToolPipeline` canonicalizes the working directory and `FileReadCap`/`FileWriteCap` paths
+      before the engine decides, so a symlink inside the workspace pointing outside it (or through a
+      protected prefix) is denied. `PermissionEngine` stays pure (ADR 0004); wired in host + sub-agents.
+- [x] Tests: real symlink-fixture resolver test + pipeline escape/allow tests with a fake resolver.
+- [ ] Follow-up: TOCTOU — the tool still acts on the lexical path after the gate passes; a same-turn
+      symlink swap is out of scope (would need open-by-handle / re-check at use).
 
 ## Medium priority — correctness
 - [ ] SSE adapters: guard `JsonDocument.Parse` per `data:` line so one malformed line

@@ -6,6 +6,17 @@ All notable changes to FreeAgent are recorded here. The format follows
 
 ## [Unreleased]
 
+### Security — symlink workspace-boundary canonicalization
+
+- **A symlink inside the workspace can no longer escape it.** Reads/writes were gated by a *lexical*
+  path check (`Path.GetFullPath`), so a link like `./x → /etc/shadow` resolved as in-workspace and was
+  auto-allowed (and a write could go *through* a link past the protected-prefix block). The pipeline
+  now canonicalizes the working directory and `FileReadCap`/`FileWriteCap` paths via a new
+  `IRealPathResolver` (`RealPathResolver` follows symlinks over the existing prefix, appends any
+  non-existing remainder lexically) *before* the permission engine decides — so the engine sees the
+  real target and denies the escape. `PermissionEngine` stays pure/no-I/O (ADR 0004); resolver wired
+  into the host and sub-agents. (TOCTOU on the tool's own post-gate access remains a noted follow-up.)
+
 ### Security — protocol server hardening
 
 - **Safe-by-default networking for `FreeAgent.Server`.** The server now binds to `127.0.0.1` by

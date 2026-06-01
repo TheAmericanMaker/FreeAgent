@@ -48,7 +48,7 @@ public sealed class SubAgentRunner
                 subRegistry.Register(tool);
         }
 
-        var subPipeline = new ToolPipeline(subRegistry, _permissions, _approver, _cache, _hooks);
+        var subPipeline = new ToolPipeline(subRegistry, _permissions, _approver, _cache, _hooks, realPaths: new RealPathResolver());
         var subState = new SessionState(
             $"sub-{Guid.NewGuid().ToString("N")[..8]}",
             parentSession.WorkingDirectory,

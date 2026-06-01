@@ -92,6 +92,50 @@ public sealed class ToolPipelineContractTests
 
     private static ToolCall Call(string name, string argumentsJson) => new("call-1", name, argumentsJson);
 
+    /// <summary>Maps one specific path to another; identity for everything else.</summary>
+    private sealed class FakeRealPathResolver(string from, string to) : IRealPathResolver
+    {
+        public string Resolve(string absolutePath) =>
+            string.Equals(absolutePath, from, StringComparison.Ordinal) ? to : absolutePath;
+    }
+
+    // Symlink escape: a path that is lexically inside the workspace but whose real target is outside
+    // is denied once the pipeline canonicalizes capability paths before the engine decides.
+    [Fact]
+    public async Task SymlinkEscapeIsDeniedAfterCanonicalization()
+    {
+        var registry = new ToolRegistry();
+        const string insideLink = "/tmp/freeagent/link"; // lexically inside NewState().WorkingDirectory
+        var tool = new FakeTool("reader", _ => ToolResult.Success("data"),
+            isReadOnly: true,
+            capabilities: (_, _) => [new FileReadCap(insideLink)]);
+        registry.Register(tool);
+        var resolver = new FakeRealPathResolver(insideLink, "/etc/passwd");
+        var pipeline = new ToolPipeline(registry, new PermissionEngine(), realPaths: resolver);
+
+        var result = await pipeline.ExecuteAsync(Call("reader", "{}"), NewState(), CancellationToken.None);
+
+        result.Kind.Should().Be(ToolResultKind.PermissionDenied);
+        tool.ExecutionCount.Should().Be(0);
+    }
+
+    // A genuine in-workspace read still auto-allows (canonicalization is identity for it).
+    [Fact]
+    public async Task InWorkspaceReadStillAllowedWithResolver()
+    {
+        var registry = new ToolRegistry();
+        var tool = new FakeTool("reader", _ => ToolResult.Success("data"),
+            isReadOnly: true,
+            capabilities: (_, _) => [new FileReadCap("/tmp/freeagent/sub/a.txt")]);
+        registry.Register(tool);
+        var pipeline = new ToolPipeline(registry, new PermissionEngine(), realPaths: new FakeRealPathResolver("x", "y"));
+
+        var result = await pipeline.ExecuteAsync(Call("reader", "{}"), NewState(), CancellationToken.None);
+
+        result.Kind.Should().Be(ToolResultKind.Success);
+        tool.ExecutionCount.Should().Be(1);
+    }
+
     // B. Invalid JSON is returned as InvalidInput, not thrown.
     [Fact]
     public async Task InvalidJsonArgumentsReturnInvalidInputAndDoNotExecuteTheTool()
