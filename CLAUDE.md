@@ -5,6 +5,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 Requires the **.NET 10 SDK** (pinned to `10.0.100` with `rollForward: latestMinor` in `global.json`).
+If `dotnet` isn't on PATH (e.g. a fresh Claude Code web sandbox — the public SDK installers are
+network-blocked there), run **`./scripts/setup-sdk.sh`** once to install it from the Ubuntu archive.
 
 ```bash
 dotnet build FreeAgent.slnx          # build everything (warnings are errors — a clean build is meaningful)

@@ -73,11 +73,12 @@ A checked-in `.freeagent/config.json` ran code on launch: `SessionStart` hooks v
 
 ## Tooling / environment
 
-- [ ] **Ship the dev/CI sandbox with the .NET 10 SDK.** The Claude-Code web sandbox has no
-      `dotnet` and blocks the SDK install mirrors, so changes can't be built or tested locally —
-      they only get a real compile/test signal from GitHub Actions, which is slow and lossy. Add a
-      `.devcontainer` (mcr.microsoft.com/dotnet/sdk:10.0) and/or a SessionStart hook / setup script
-      that provisions the SDK, so the agent can run `dotnet build` / `dotnet test` before pushing.
+- [x] **Provision the .NET 10 SDK in the sandbox.** The web sandbox has no `dotnet` and blocks the
+      public SDK installers, but the Ubuntu 24.04 archive ships `dotnet-sdk-10.0` (10.0.10x, which
+      satisfies `global.json`). Added **`scripts/setup-sdk.sh`** (idempotent apt install) + README/
+      CLAUDE.md notes, so a session can `./scripts/setup-sdk.sh` then build/test locally instead of
+      pushing blind. _Considered but declined (per maintainer): an auto-run SessionStart hook and a
+      `.devcontainer`. Revisit a devcontainer/hook if hands-free provisioning is wanted later._
 - [ ] **Server robustness:** `POST /sessions` eagerly constructs the provider, which previously
       500'd when no API key was configured (fixed with a placeholder key in `ProviderFactory`).
       Consider deferring provider creation to the first turn, or validating provider config at
