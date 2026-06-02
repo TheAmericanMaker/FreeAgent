@@ -11,6 +11,7 @@ namespace FreeAgent.Kernel.Tests.Server;
 /// exercise <c>POST /turns</c> end-to-end because that would call out to a real LLM provider; the
 /// CRUD shape, listing, and the auth gate are fully covered.
 /// </summary>
+[Collection(ServerCollection.Name)]
 public sealed class SessionEndpointsTests : IClassFixture<WebApplicationFactory<Program>>
 {
     private readonly WebApplicationFactory<Program> _factory;
@@ -61,7 +62,8 @@ public sealed class SessionEndpointsTests : IClassFixture<WebApplicationFactory<
         get.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await get.Content.ReadAsStringAsync();
         body.Should().Contain("\"sessionId\"")
-            .And.Contain("\"messageCount\":0")
+            // A freshly created session carries one message: the composed system prompt.
+            .And.Contain("\"messageCount\":1")
             .And.Contain("\"planMode\":false");
     }
 
