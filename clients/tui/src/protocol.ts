@@ -17,6 +17,82 @@ export interface SessionSummary {
   totalIterations: number;
 }
 
+// ── Config / setup types (mirror FreeAgent.Server's ConfigEndpoints DTOs) ─────────────────────
+export interface ProviderField {
+  slot: string;
+  label: string;
+  default: string | null;
+  secret: boolean;
+}
+
+export interface ProviderInfo {
+  id: string;
+  description: string;
+  requiresApiKey: boolean;
+  fields: ProviderField[];
+}
+
+export interface ModelInfo {
+  id: string;
+  wireApi: string;
+  contextTokens: number | null;
+  maxOutputTokens: number | null;
+  supportsTools: boolean;
+  supportsVision: boolean;
+  supportsThinking: boolean;
+}
+
+export interface ProviderView {
+  baseUrl: string | null;
+  model: string | null;
+  apiVersion: string | null;
+  apiKeySet: boolean;
+  apiKeyHint: string | null;
+}
+
+export interface ConfigView {
+  activeProvider: string;
+  configPath: string;
+  providers: Record<string, ProviderView>;
+}
+
+export interface UpdateProviderRequest {
+  provider: string;
+  apiKey?: string;
+  baseUrl?: string;
+  model?: string;
+  apiVersion?: string;
+  setAsDefault?: boolean;
+}
+
+export interface ProbeResult {
+  ok: boolean;
+  message: string;
+  mode: 'live' | 'fields' | 'skipped';
+}
+
+export interface CapabilityRule {
+  capability: string;
+  pattern: string | null;
+}
+
+export interface PermissionsView {
+  allowTools: string[];
+  denyTools: string[];
+  allow: CapabilityRule[];
+  deny: CapabilityRule[];
+  knownCapabilities: string[];
+  builtinTools: string[];
+  configPath: string;
+  error: string | null;
+}
+
+export interface TrustView {
+  workingDirectory: string;
+  trusted: boolean;
+  requests: string[];
+}
+
 export type SseEvent =
   | { event: 'text'; data: { chunk: string } }
   | { event: 'thinking'; data: { chunk: string } }
@@ -61,6 +137,80 @@ export class FreeAgentClient {
   async deleteSession(id: string): Promise<void> {
     const r = await fetch(`${this.opts.baseUrl}/sessions/${id}`, { method: 'DELETE', headers: this.headers() });
     if (!r.ok && r.status !== 404) throw new Error(`deleteSession failed: ${r.status}`);
+  }
+
+  // ── Config / setup ───────────────────────────────────────────────────────────────────────────
+  /** Lightweight GET that doubles as a reachability probe — used to decide whether to spawn the server. */
+  async ping(signal?: AbortSignal): Promise<boolean> {
+    try {
+      const r = await fetch(`${this.opts.baseUrl}/config`, { headers: this.headers(), signal });
+      return r.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  async getProviders(): Promise<ProviderInfo[]> {
+    return this.getJson<ProviderInfo[]>('/providers');
+  }
+
+  async getModels(provider?: string): Promise<ModelInfo[]> {
+    const q = provider ? `?provider=${encodeURIComponent(provider)}` : '';
+    return this.getJson<ModelInfo[]>(`/models${q}`);
+  }
+
+  async getConfig(): Promise<ConfigView> {
+    return this.getJson<ConfigView>('/config');
+  }
+
+  async updateProvider(req: UpdateProviderRequest): Promise<void> {
+    await this.send('PUT', '/config/provider', req);
+  }
+
+  async testProvider(req: UpdateProviderRequest): Promise<ProbeResult> {
+    return this.send<ProbeResult>('POST', '/config/provider/test', req);
+  }
+
+  async getPermissions(dir?: string): Promise<PermissionsView> {
+    const q = dir ? `?dir=${encodeURIComponent(dir)}` : '';
+    return this.getJson<PermissionsView>(`/config/permissions${q}`);
+  }
+
+  async updatePermissions(body: {
+    dir: string;
+    allowTools?: string[];
+    denyTools?: string[];
+    allow?: CapabilityRule[];
+    deny?: CapabilityRule[];
+  }): Promise<void> {
+    await this.send('PUT', '/config/permissions', body);
+  }
+
+  async getTrust(dir?: string): Promise<TrustView> {
+    const q = dir ? `?dir=${encodeURIComponent(dir)}` : '';
+    return this.getJson<TrustView>(`/config/trust${q}`);
+  }
+
+  async trust(dir: string): Promise<void> {
+    await this.send('POST', '/config/trust', { dir });
+  }
+
+  private async getJson<T>(path: string): Promise<T> {
+    const r = await fetch(`${this.opts.baseUrl}${path}`, { headers: this.headers() });
+    if (!r.ok) throw new Error(`GET ${path} failed: ${r.status} ${await r.text()}`);
+    return r.json() as Promise<T>;
+  }
+
+  private async send<T = void>(method: string, path: string, body: unknown): Promise<T> {
+    const r = await fetch(`${this.opts.baseUrl}${path}`, {
+      method,
+      headers: this.headers(),
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) throw new Error(`${method} ${path} failed: ${r.status} ${await r.text()}`);
+    // Some endpoints (PUT) return a small ack we don't need; tolerate empty bodies.
+    const text = await r.text();
+    return (text ? JSON.parse(text) : undefined) as T;
   }
 
   /**
