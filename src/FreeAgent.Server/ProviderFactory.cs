@@ -12,7 +12,16 @@ namespace FreeAgent.Server;
 /// </summary>
 public sealed class ProviderFactory
 {
-    private readonly ProviderConfig _config = ProviderConfig.Load();
+    private ProviderConfig _config = ProviderConfig.Load();
+
+    /// <summary>The currently loaded user config — read by the config endpoints to report state.</summary>
+    public ProviderConfig Config => _config;
+
+    /// <summary>
+    /// Re-reads the user config from disk. Called after a config-write endpoint mutates the file so
+    /// that subsequently-created sessions pick up the new provider/key without a server restart.
+    /// </summary>
+    public void Reload() => _config = ProviderConfig.Load();
 
     public (IProvider Provider, string Model, string ProviderName) Create()
     {

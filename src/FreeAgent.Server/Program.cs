@@ -46,6 +46,7 @@ app.Use(async (ctx, next) =>
 });
 
 SessionEndpoints.Map(app, maxSessions);
+ConfigEndpoints.Map(app);
 
 app.Run();
 
