@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Launch the FreeAgent TUI (Linux / macOS). Thin wrapper so you don't have to remember the cd + bun
+# dance. Run setup first with scripts/install-tui.sh. Any args are forwarded to the TUI.
+set -euo pipefail
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+tui_dir="$repo_root/clients/tui"
+
+if command -v bun >/dev/null 2>&1; then
+  bun_bin="$(command -v bun)"
+elif [[ -x "$HOME/.bun/bin/bun" ]]; then
+  bun_bin="$HOME/.bun/bin/bun"
+else
+  echo "Bun not found. Run scripts/install-tui.sh first." >&2
+  exit 1
+fi
+
+cd "$tui_dir"
+exec "$bun_bin" run src/tui.tsx "$@"
