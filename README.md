@@ -61,6 +61,32 @@ The largest is OpenAIProvider.cs at 307 lines …
 
 ## Install
 
+FreeAgent ships two front ends — pick whichever fits:
+
+- **The app (full-screen TUI)** — an opencode-style terminal UI with **in-app setup** (pick a
+  provider, paste a key, choose a model — no terminal config), streaming chat with Markdown and
+  live tool activity, a `/command` palette, and a settings screen for permissions & trust. Best for
+  most users.
+- **The CLI tool** — the headless `freeagent` REPL, configured via a terminal wizard / env vars.
+  Best for scripting and power users.
+
+### The app (TUI)
+
+```bash
+git clone https://github.com/TheAmericanMaker/FreeAgent.git
+cd FreeAgent
+scripts/install-tui.sh          # Windows: powershell -ExecutionPolicy Bypass -File scripts\install-tui.ps1
+scripts/freeagent-ui            # Windows: scripts\freeagent-ui.ps1
+```
+
+`install-tui` installs Bun if needed, restores the UI's dependencies, and publishes
+`FreeAgent.Server` as a **self-contained binary** — so after install the app launches with no .NET
+SDK at run time. (Publishing needs the .NET 10 SDK once; pass `--skip-publish` to use a `dotnet run`
+dev server instead.) On first launch the app walks you through provider setup inside the UI. The
+TUI lives in [`clients/tui/`](clients/tui/).
+
+### The CLI tool
+
 Requires the **.NET 10 SDK** (the repo pins `10.0.100` via `global.json` with
 `rollForward: latestMinor`). The interactive installer takes care of everything else:
 
@@ -481,9 +507,18 @@ src/FreeAgent.Host/                The interactive CLI
 src/FreeAgent.Server/              HTTP + SSE protocol surface (ADR 0005)
   Program.cs              ASP.NET Core minimal API entrypoint + optional bearer auth
   SessionEndpoints.cs     POST /sessions, GET /sessions[/id], POST /sessions/{id}/turns (SSE), DELETE
+                          — sessions get the full built-in tool set + system prompt + trust-aware perms
+  ConfigEndpoints.cs      GET /providers, /models, /config; PUT /config/provider; POST
+                          /config/provider/test; GET/PUT /config/permissions; GET/POST /config/trust
+  ProviderProbe.cs        Best-effort live key/reachability check behind /config/provider/test
   SessionRegistry.cs      In-memory session map
-  ProviderFactory.cs      Picks IProvider from the same ProviderConfig the CLI uses
+  ProviderFactory.cs      Picks IProvider from the same ProviderConfig the CLI uses (reloadable)
   HttpSseEventSink.cs     IEventSink that streams events into an SSE response
+
+clients/tui/                       Full-screen TUI (Bun + React + opentui) — the in-app UI + setup
+  src/tui.tsx             Entry: boots/finds the server, then renders
+  src/ui/Chat.tsx         Streaming chat, tool activity, status bar
+  src/ui/Setup.tsx        In-app setup wizard (provider/key/model/working-dir) — no terminal config
 
 src/FreeAgent.Kernel.Tests/        xUnit + FluentAssertions; fakes for every seam
                                    (445 pass)
