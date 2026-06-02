@@ -6,7 +6,7 @@ contract (`/openapi/v1.json`).
 
 | Path                          | Status   | Description                                                                 |
 | ----------------------------- | -------- | --------------------------------------------------------------------------- |
-| [`tui/`](tui/)                | Scaffold | Bun + TypeScript. Protocol client + smoke CLI. The opentui-based full-screen UI builds on top. |
+| [`tui/`](tui/)                | Working  | Bun + React + opentui full-screen TUI: streaming chat, tool activity, and an **in-app setup wizard** (provider/key/model/working-dir) — no terminal config. Auto-launches the server. `cd clients/tui && bun install && bun run tui`. |
 | [`vscode/`](vscode/)          | Scaffold | VS Code extension. "New Session" + "Ask…" commands streaming into an output channel. |
 
 Each client is self-contained (its own `package.json`); they do NOT share a build with the .NET

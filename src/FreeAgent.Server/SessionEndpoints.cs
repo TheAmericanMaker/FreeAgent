@@ -1,5 +1,6 @@
 using System.Text.Json;
 using FreeAgent.Kernel;
+using FreeAgent.Host;
 
 namespace FreeAgent.Server;
 
@@ -102,18 +103,95 @@ public static class SessionEndpoints
         var (provider, _, _) = factory.Create();
         var registry = new ToolRegistry();
         var permissions = new PermissionEngine();
+
+        // Apply the project's .freeagent permission config, honoring workspace trust. A config that
+        // wants to run code or widen permissions is honored only for a directory the user has trusted
+        // (via POST /config/trust from the UI); otherwise only its deny-rules apply. Deny always applies.
+        var projectConfig = LoadProjectConfig(workingDir);
+        var trusted = projectConfig is null
+            || ProjectTrust.DescribeRequests(projectConfig).Count == 0
+            || ProjectTrust.IsTrusted(workingDir);
+        projectConfig?.ApplyTo(permissions, includeGrants: trusted);
+
         var artifactStore = new InMemoryArtifactStore();
+        var hooks = new HookRunner(trusted ? projectConfig?.Hooks : null, new BashShellExecutor());
         var pipeline = new ToolPipeline(
             registry,
             permissions,
             approver: null,            // server context: prompting a human isn't available; everything goes through engine rules
             cache: new InMemoryToolResultCache(),
-            hooks: null,
-            artifacts: artifactStore);
+            hooks: hooks,
+            artifacts: artifactStore,
+            realPaths: new RealPathResolver());
+
+        RegisterBuiltinTools(registry, artifactStore);
+        RegisterSubAgents(registry, provider, permissions);
+
         var store = new JsonlSessionStore();
         var state = new SessionState(id, workingDir, DateTimeOffset.UtcNow);
+        // Same system prompt the CLI composes — without it the model has no operating instructions.
+        state.Messages.Add(new Message(MessageRole.System, SystemPrompt.Compose(workingDir)));
         var runtime = new SessionRuntime(provider, registry, pipeline, store, new NullEventSink(), state);
         return new SessionRegistry.SessionEntry(state, runtime, workingDir);
+    }
+
+    /// <summary>Registers the same built-in tool set the host CLI exposes (kernel-resident adapters).</summary>
+    private static void RegisterBuiltinTools(ToolRegistry registry, InMemoryArtifactStore artifactStore)
+    {
+        registry.Register(new ReadFileTool());
+        registry.Register(new WriteFileTool());
+        registry.Register(new EditFileTool());
+        registry.Register(new MultiEditFileTool());
+        registry.Register(new ApplyPatchTool());
+        registry.Register(new ProcessExecTool());
+        registry.Register(new GlobTool());
+        registry.Register(new GrepTool());
+        registry.Register(new CSharpAnalysisTool());
+        registry.Register(new EnterPlanModeTool());
+        registry.Register(new ExitPlanModeTool());
+        registry.Register(new ReadMemoryTool());
+        registry.Register(new WriteMemoryTool());
+        registry.Register(new ReadArtifactTool(artifactStore));
+    }
+
+    /// <summary>Registers the four default sub-agent roles and the SpawnAgent tool, mirroring the host.</summary>
+    private static void RegisterSubAgents(ToolRegistry registry, IProvider provider, PermissionEngine permissions)
+    {
+        var agents = new AgentRegistry();
+        agents.Register(new AgentDefinition(
+            "Explore",
+            ["ReadFile", "Glob", "Grep", "CSharpAnalysis", "ReadMemory"],
+            "You are an Explore sub-agent. You may only read and search the workspace; report what you find concisely."));
+        agents.Register(new AgentDefinition(
+            "Plan",
+            ["ReadFile", "Glob", "Grep", "CSharpAnalysis", "ReadMemory", "EnterPlanMode", "ExitPlanMode"],
+            "You are a Plan sub-agent. Investigate the task and produce a step-by-step plan. Do not make changes."));
+        agents.Register(new AgentDefinition(
+            "Coder",
+            ["ReadFile", "WriteFile", "EditFile", "Glob", "Grep", "ProcessExec", "ReadMemory", "WriteMemory", "EnterPlanMode", "ExitPlanMode"],
+            "You are a Coder sub-agent. Implement the task with minimal, correct changes; verify when practical."));
+        agents.Register(new AgentDefinition(
+            "Verify",
+            ["ReadFile", "Glob", "Grep", "ProcessExec", "ReadMemory"],
+            "You are a Verify sub-agent. Run tests, lints, and other verifications; report findings concisely."));
+
+        // No ConsoleApprover in the server: sub-agent capability prompts resolve through engine rules.
+        var subAgentRunner = new SubAgentRunner(provider, registry, permissions, agents, approver: null);
+        registry.Register(new SpawnAgentTool(subAgentRunner, agents));
+    }
+
+    /// <summary>Parses <c>{workingDir}/.freeagent/config.json</c> (or <c>$FREEAGENT_CONFIG</c>); null if absent/malformed.</summary>
+    private static PermissionConfig? LoadProjectConfig(string workingDir)
+    {
+        var path = Environment.GetEnvironmentVariable("FREEAGENT_CONFIG");
+        if (string.IsNullOrWhiteSpace(path))
+            path = Path.Combine(workingDir, ".freeagent", "config.json");
+        if (!File.Exists(path)) return null;
+        try { return PermissionConfig.Parse(File.ReadAllText(path)); }
+        catch (Exception ex) when (ex is JsonException or ArgumentException or IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
     }
 }
 

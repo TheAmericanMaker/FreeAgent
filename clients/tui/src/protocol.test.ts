@@ -1,8 +1,8 @@
 // SSE-parser tests. The networked CRUD paths are exercised against the live server in
 // FreeAgent.Kernel.Tests; here we cover the parser logic that runs purely in the client.
 
-import { describe, expect, test } from 'bun:test';
-import { parseSseStream } from './protocol';
+import { afterEach, describe, expect, test } from 'bun:test';
+import { FreeAgentClient, parseSseStream } from './protocol';
 
 function streamOf(...chunks: string[]): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
@@ -53,5 +53,65 @@ describe('parseSseStream', () => {
       events.push(ev);
     }
     expect(events).toEqual([{ event: 'text', data: { chunk: 'ok' } }]);
+  });
+});
+
+describe('FreeAgentClient config methods', () => {
+  const realFetch = globalThis.fetch;
+  let calls: { url: string; init?: RequestInit }[] = [];
+
+  function stubFetch(handler: (url: string, init?: RequestInit) => { status?: number; body?: unknown }) {
+    calls = [];
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      calls.push({ url, init });
+      const { status = 200, body = {} } = handler(url, init);
+      return new Response(typeof body === 'string' ? body : JSON.stringify(body), { status });
+    }) as typeof fetch;
+  }
+
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+  });
+
+  test('getModels encodes the provider query', async () => {
+    stubFetch(() => ({ body: [{ id: 'gpt-4o', wireApi: 'openai' }] }));
+    const client = new FreeAgentClient({ baseUrl: 'http://x' });
+    const models = await client.getModels('openai');
+    expect(calls[0]!.url).toBe('http://x/models?provider=openai');
+    expect(models[0]!.id).toBe('gpt-4o');
+  });
+
+  test('updateProvider PUTs the request body with auth header', async () => {
+    stubFetch(() => ({ status: 200, body: { provider: 'openai' } }));
+    const client = new FreeAgentClient({ baseUrl: 'http://x', apiKey: 'secret' });
+    await client.updateProvider({ provider: 'openai', apiKey: 'sk-1', setAsDefault: true });
+    const call = calls[0]!;
+    expect(call.url).toBe('http://x/config/provider');
+    expect(call.init!.method).toBe('PUT');
+    expect((call.init!.headers as Record<string, string>).authorization).toBe('Bearer secret');
+    expect(JSON.parse(call.init!.body as string)).toMatchObject({ provider: 'openai', apiKey: 'sk-1' });
+  });
+
+  test('testProvider parses the probe result', async () => {
+    stubFetch(() => ({ body: { ok: false, message: 'No API key set.', mode: 'fields' } }));
+    const client = new FreeAgentClient({ baseUrl: 'http://x' });
+    const result = await client.testProvider({ provider: 'openai' });
+    expect(result.ok).toBe(false);
+    expect(result.mode).toBe('fields');
+  });
+
+  test('ping returns false when the server is unreachable', async () => {
+    globalThis.fetch = (async () => {
+      throw new Error('ECONNREFUSED');
+    }) as unknown as typeof fetch;
+    const client = new FreeAgentClient({ baseUrl: 'http://x' });
+    expect(await client.ping()).toBe(false);
+  });
+
+  test('a non-ok response rejects with the status', async () => {
+    stubFetch(() => ({ status: 400, body: 'bad' }));
+    const client = new FreeAgentClient({ baseUrl: 'http://x' });
+    await expect(client.getConfig()).rejects.toThrow('400');
   });
 });

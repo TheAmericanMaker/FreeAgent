@@ -164,6 +164,23 @@ public sealed class ProviderConfig
         return Path.Combine(configHome, "freeagent", "config.json");
     }
 
+    /// <summary>
+    /// Persists a config document to <paramref name="path"/>, creating the directory and (on Unix)
+    /// tightening the file to <c>chmod 600</c> since it holds API keys. Shared by the interactive
+    /// CLI wizard and the server's config endpoints so both write the file the same way.
+    /// </summary>
+    public static void WriteFile(string path, string json)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, json);
+        if (!OperatingSystem.IsWindows())
+        {
+            // chmod 600 — config holds API keys, keep it out of group/other reads.
+            try { File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* best-effort */ }
+        }
+    }
+
     /// <summary>Loads the config from <paramref name="path"/> (default <see cref="ConfigPath"/>). A
     /// missing file yields an empty config; a malformed one is a non-fatal warning.</summary>
     public static ProviderConfig Load(string? path = null)
