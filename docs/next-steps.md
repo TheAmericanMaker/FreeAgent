@@ -54,11 +54,16 @@ A checked-in `.freeagent/config.json` ran code on launch: `SessionStart` hooks v
       doesn't abort the turn (match Ollama's try/skip).
 - [ ] Compaction: reset `LastInputTokens` after compacting so it can't re-fire every
       turn when the next response reports no usage.
-- [ ] Server: serialize concurrent turns per session; make SSE writes async so a slow
-      client can't block the agent loop.
+- [ ] Server: make SSE writes async so a slow client can't block the agent loop
+      (turns are now serialized per session; the write path is the remaining piece).
 - [ ] `ProcessExecCap`: consider matching args, not just the binary, in allow-rules.
 - [ ] Providers/`/serve`: require `https://` (or explicit opt-in) for base URLs and
       model-download sources.
+- [ ] **`POST /config/provider/test` is a blind-SSRF vector** (found reviewing PR #9):
+      `ProviderProbe` sends a GET to a caller-supplied `baseUrl`, so an authed/local caller
+      can probe internal hosts and read reachability/status signals. Low severity behind the
+      loopback/auth posture, but worth a scheme allow-list (`https`, plus `http` only for
+      localhost/Ollama) and/or blocking obviously-internal targets.
 
 ## Low priority — polish
 - [ ] Crash-atomic writes for `WriteFile` / `ApplyPatch` / `MultiEdit` via
