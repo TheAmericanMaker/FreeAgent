@@ -52,6 +52,7 @@ public static class ProviderProbe
     {
         if (string.IsNullOrWhiteSpace(apiKey)) return new ProbeResult(false, "No API key set.", "fields");
         var url = $"{(baseUrl ?? ProviderConfig.DefaultBaseUrl).TrimEnd('/')}/models";
+        if (Reject(url) is { } unsafeUrl) return unsafeUrl;
         using var msg = new HttpRequestMessage(HttpMethod.Get, url);
         msg.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
         using var resp = await Http.SendAsync(msg, ct);
@@ -62,6 +63,7 @@ public static class ProviderProbe
     {
         if (string.IsNullOrWhiteSpace(apiKey)) return new ProbeResult(false, "No API key set.", "fields");
         var url = $"{(baseUrl ?? ProviderConfig.AnthropicDefaultBaseUrl).TrimEnd('/')}/v1/models";
+        if (Reject(url) is { } unsafeUrl) return unsafeUrl;
         using var msg = new HttpRequestMessage(HttpMethod.Get, url);
         msg.Headers.Add("x-api-key", apiKey);
         msg.Headers.Add("anthropic-version", "2023-06-01");
@@ -72,6 +74,7 @@ public static class ProviderProbe
     private static async Task<ProbeResult> ProbeOllamaAsync(string? baseUrl, CancellationToken ct)
     {
         var url = $"{(baseUrl ?? ProviderConfig.OllamaDefaultBaseUrl).TrimEnd('/')}/api/tags";
+        if (Reject(url) is { } unsafeUrl) return unsafeUrl;
         using var resp = await Http.GetAsync(url, ct);
         return resp.IsSuccessStatusCode
             ? new ProbeResult(true, "Ollama is reachable.", "live")
@@ -84,6 +87,7 @@ public static class ProviderProbe
         if (string.IsNullOrWhiteSpace(apiKey)) return new ProbeResult(false, "No API key set.", "fields");
         var ver = string.IsNullOrWhiteSpace(apiVersion) ? "2024-08-01-preview" : apiVersion;
         var url = $"{endpoint.TrimEnd('/')}/openai/models?api-version={ver}";
+        if (Reject(url) is { } unsafeUrl) return unsafeUrl;
         using var msg = new HttpRequestMessage(HttpMethod.Get, url);
         msg.Headers.Add("api-key", apiKey);
         using var resp = await Http.SendAsync(msg, ct);
@@ -99,6 +103,26 @@ public static class ProviderProbe
 
     private static string? Coalesce(string? a, string? b) =>
         !string.IsNullOrWhiteSpace(a) ? a : b;
+
+    /// <summary>
+    /// SSRF guard for the "test connection" probe: this endpoint sends a request to a caller-supplied
+    /// URL, so an authed/local caller could otherwise use the server to reach arbitrary hosts. Allow
+    /// <c>https</c> to any host (legitimate cloud APIs), or <c>http</c> only to loopback (a local
+    /// OpenAI-compatible / Ollama server). Plaintext http to a non-loopback host — the easy path to
+    /// internal services (metadata endpoints, private ranges) — is refused. (A determined caller could
+    /// still aim https at an internal host; that narrower vector is a noted residual.)
+    /// </summary>
+    public static bool IsAllowedTarget(string? url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var uri)
+        && (uri.Scheme == Uri.UriSchemeHttps
+            || (uri.Scheme == Uri.UriSchemeHttp && uri.IsLoopback));
+
+    private static ProbeResult? Reject(string url) =>
+        IsAllowedTarget(url)
+            ? null
+            : new ProbeResult(false,
+                "Refusing to connect: the test endpoint allows https URLs, or http only to localhost.",
+                "fields");
 }
 
 /// <summary><c>Mode</c> is <c>live</c> (an actual call was made), <c>fields</c> (failed local validation),

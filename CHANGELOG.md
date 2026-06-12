@@ -6,6 +6,14 @@ All notable changes to FreeAgent are recorded here. The format follows
 
 ## [Unreleased]
 
+### Security — SSRF guard on the provider-test endpoint
+
+- **`POST /config/provider/test` no longer probes arbitrary hosts.** The endpoint sends a request to
+  a caller-supplied base URL; it now refuses unless the target is `https` (any host) or `http` to
+  **loopback** only — blocking plaintext probes of internal services (cloud metadata endpoints,
+  private IP ranges) while still allowing a local OpenAI-compatible / Ollama server. (`https` to an
+  internal host remains reachable — a narrower residual, noted in `docs/next-steps.md`.)
+
 ### Fixed — streaming + compaction correctness
 
 - **A malformed SSE `data:` line no longer aborts a turn.** The OpenAI-compatible, Anthropic, and
