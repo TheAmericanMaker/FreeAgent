@@ -68,12 +68,14 @@ A checked-in `.freeagent/config.json` ran code on launch: `SessionStart` hooks v
 ## Low priority — polish
 - [ ] Crash-atomic writes for `WriteFile` / `ApplyPatch` / `MultiEdit` via
       `IAtomicFileSystem` (temp-write → rename).
-- [ ] Doom-loop budget off-by-one vs its "(attempt N of 3)" message.
+- [~] Doom-loop budget vs its "(attempt N of 3)" message — reviewed: behavior is consistent
+      (3 recovery reprompts, then halt). No change.
 - [ ] `JsonlSessionStore` in-memory fallback can mask a deleted file on resume.
 - [ ] LSP header read is byte-at-a-time; add a write gate like the MCP transport.
-- [ ] Cancelled JSON-RPC call leaves a stale `_pending` entry.
+- [x] Cancelled JSON-RPC call no longer leaves a stale `_pending` entry (removed in the cancel
+      registration, under the same lock the read loop uses).
 - [ ] `ModelServerLauncher` PID-reuse race in `IsAlive`/`Stop`.
-- [ ] Parse OpenAI `cached_tokens` usage (advertised in `Usage` but never read).
+- [x] Parse OpenAI `cached_tokens` usage (`prompt_tokens_details.cached_tokens` → `CacheReadTokens`) + test.
 - [ ] Remove the duplicate stream-complete sentinel in the OpenAI-compat parser.
 
 ## Tooling / environment

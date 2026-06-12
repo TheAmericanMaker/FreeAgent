@@ -246,6 +246,25 @@ public class OpenAIProviderTests : IDisposable
     }
 
     [Fact]
+    public async Task Usage_ExtractsCachedTokensFromPromptTokensDetails()
+    {
+        WireResponse("""
+            data: {"id":"x","choices":[],"usage":{"prompt_tokens":100,"completion_tokens":5,"prompt_tokens_details":{"cached_tokens":80}}}
+            data: [DONE]
+
+            """);
+
+        _provider = new OpenAIProvider(_httpClient, "https://api.openai.com/v1/");
+
+        var chunks = await _provider.StreamChatAsync(StubRequest(), default).ToListAsync();
+
+        var usage = chunks.Single(c => c.Usage is not null).Usage!;
+        usage.InputTokens.Should().Be(100);
+        usage.CacheReadTokens.Should().Be(80);
+        usage.CacheWriteTokens.Should().Be(0); // OpenAI has no separate cache-write count
+    }
+
+    [Fact]
     public async Task FinishReason_TriggersIsComplete()
     {
         WireResponse("""

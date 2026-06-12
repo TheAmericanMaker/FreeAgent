@@ -6,6 +6,15 @@ All notable changes to FreeAgent are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed — provider usage + JSON-RPC cleanup
+
+- **OpenAI cache-hit tokens are now reported.** The OpenAI-compatible adapter reads
+  `prompt_tokens_details.cached_tokens` into the normalized `Usage.CacheReadTokens` (it was advertised
+  on `Usage` but never populated for OpenAI).
+- **A cancelled MCP/LSP JSON-RPC call no longer leaks its pending entry.** The cancellation
+  registration removes the id from the pending map (under the read loop's lock), instead of leaving it
+  until a never-arriving response or disposal.
+
 ### Security — SSRF guard on the provider-test endpoint
 
 - **`POST /config/provider/test` no longer probes arbitrary hosts.** The endpoint sends a request to

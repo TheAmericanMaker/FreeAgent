@@ -272,6 +272,16 @@ internal static class OpenAICompatStreaming
             hasAny = true;
         }
 
-        return hasAny ? new Usage(input, output) : null;
+        // OpenAI reports cache hits under prompt_tokens_details.cached_tokens (cache reads only; it
+        // has no separate cache-write count). Surface it as the normalized CacheReadTokens.
+        var cacheRead = 0;
+        if (usage.TryGetProperty("prompt_tokens_details", out var details)
+            && details.TryGetProperty("cached_tokens", out var cached)
+            && cached.ValueKind == JsonValueKind.Number)
+        {
+            cacheRead = cached.GetInt32();
+        }
+
+        return hasAny ? new Usage(input, output, cacheRead) : null;
     }
 }
