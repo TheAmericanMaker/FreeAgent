@@ -59,11 +59,11 @@ A checked-in `.freeagent/config.json` ran code on launch: `SessionStart` hooks v
 - [ ] `ProcessExecCap`: consider matching args, not just the binary, in allow-rules.
 - [ ] Providers/`/serve`: require `https://` (or explicit opt-in) for base URLs and
       model-download sources.
-- [ ] **`POST /config/provider/test` is a blind-SSRF vector** (found reviewing PR #9):
-      `ProviderProbe` sends a GET to a caller-supplied `baseUrl`, so an authed/local caller
-      can probe internal hosts and read reachability/status signals. Low severity behind the
-      loopback/auth posture, but worth a scheme allow-list (`https`, plus `http` only for
-      localhost/Ollama) and/or blocking obviously-internal targets.
+- [x] **`POST /config/provider/test` SSRF guard** (found reviewing PR #9): `ProviderProbe` now
+      refuses to connect unless the target is `https` (any host) or `http` to **loopback** only —
+      blocking plaintext probes of internal hosts (metadata endpoints, private ranges) while keeping
+      local OpenAI-compat / Ollama servers working. `ProviderProbe.IsAllowedTarget` + tests. _Residual:
+      `https` to an internal host is still reachable — a narrower vector, noted._
 
 ## Low priority — polish
 - [ ] Crash-atomic writes for `WriteFile` / `ApplyPatch` / `MultiEdit` via
