@@ -10,6 +10,8 @@ namespace FreeAgent.Kernel;
 /// </summary>
 public sealed class MultiEditFileTool : ITool
 {
+    private readonly IAtomicFileSystem _atomicFs = new LinuxAtomicFileSystem();
+
     public string Name => "MultiEditFile";
 
     public string Description =>
@@ -100,7 +102,7 @@ public sealed class MultiEditFileTool : ITool
 
         try
         {
-            await File.WriteAllTextAsync(path, working, cancellationToken);
+            await _atomicFs.WriteAllTextAtomicAsync(path, working, cancellationToken);
             context.Session.History.Record(path, original);
         }
         catch (OperationCanceledException) { throw; }

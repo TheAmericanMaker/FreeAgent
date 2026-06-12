@@ -11,6 +11,8 @@ namespace FreeAgent.Kernel;
 /// </summary>
 public sealed class WriteFileTool : ITool
 {
+    private readonly IAtomicFileSystem _atomicFs = new LinuxAtomicFileSystem();
+
     public string Name => "WriteFile";
     public string Description =>
         "Write UTF-8 text to a workspace file, creating any missing parent directories and overwriting "
@@ -49,7 +51,7 @@ public sealed class WriteFileTool : ITool
                 Directory.CreateDirectory(directory);
             }
 
-            await File.WriteAllTextAsync(path, content, cancellationToken);
+            await _atomicFs.WriteAllTextAtomicAsync(path, content, cancellationToken);
             context.Session.History.Record(path, previous);
 
             // WriteAllTextAsync emits UTF-8 with no BOM, so this is the exact on-disk byte count.

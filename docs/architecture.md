@@ -12,7 +12,7 @@ phasing decision that made the kernel headless and added the protocol server, se
 
 Everything the kernel touches at runtime is behind an interface, and the kernel
 holds no global or static mutable state. That is what makes it deterministic and
-fully testable against fakes (541 passing tests today).
+fully testable against fakes (542 passing tests today).
 
 ```
                         ┌─────────────────────────────────────────────────┐

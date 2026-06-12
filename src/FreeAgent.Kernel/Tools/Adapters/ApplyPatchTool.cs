@@ -12,6 +12,8 @@ namespace FreeAgent.Kernel;
 /// </summary>
 public sealed class ApplyPatchTool : ITool
 {
+    private readonly IAtomicFileSystem _atomicFs = new LinuxAtomicFileSystem();
+
     public string Name => "ApplyPatch";
 
     public string Description =>
@@ -77,7 +79,7 @@ public sealed class ApplyPatchTool : ITool
 
         try
         {
-            await File.WriteAllTextAsync(path, working, cancellationToken);
+            await _atomicFs.WriteAllTextAtomicAsync(path, working, cancellationToken);
             context.Session.History.Record(path, original);
         }
         catch (OperationCanceledException) { throw; }

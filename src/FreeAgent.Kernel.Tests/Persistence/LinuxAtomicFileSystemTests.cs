@@ -22,6 +22,23 @@ public sealed class LinuxAtomicFileSystemTests
     }
 
     [Fact]
+    public async Task WriteAllTextAtomicAsync_WritesContentAndLeavesNoTempFileBehind()
+    {
+        var directory = Directory.CreateTempSubdirectory("freeagent-atomic-");
+        var path = Path.Combine(directory.FullName, "out.txt");
+        // Typed as the interface: WriteAllTextAtomicAsync is a default interface method.
+        IAtomicFileSystem fs = new LinuxAtomicFileSystem();
+
+        // Overwrite an existing file to exercise the rename-over path.
+        await File.WriteAllTextAsync(path, "old", CancellationToken.None);
+        await fs.WriteAllTextAtomicAsync(path, "new content", CancellationToken.None);
+
+        (await File.ReadAllTextAsync(path, CancellationToken.None)).Should().Be("new content");
+        // The temp file must have been renamed away — only the target remains in the directory.
+        Directory.GetFiles(directory.FullName).Should().ContainSingle().Which.Should().Be(path);
+    }
+
+    [Fact]
     public async Task TempPathsAreUniqueSameDirectoryAndNotFixedTargetTmpNames()
     {
         var directory = Directory.CreateTempSubdirectory("freeagent-jsonl-");
