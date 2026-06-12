@@ -50,10 +50,10 @@ A checked-in `.freeagent/config.json` ran code on launch: `SessionStart` hooks v
       symlink swap is out of scope (would need open-by-handle / re-check at use).
 
 ## Medium priority — correctness
-- [ ] SSE adapters: guard `JsonDocument.Parse` per `data:` line so one malformed line
-      doesn't abort the turn (match Ollama's try/skip).
-- [ ] Compaction: reset `LastInputTokens` after compacting so it can't re-fire every
-      turn when the next response reports no usage.
+- [x] SSE adapters: guard `JsonDocument.Parse` per `data:` line so one malformed line
+      doesn't abort the turn (OpenAI-compat / Anthropic / Vertex now try/skip like Ollama). + test.
+- [x] Compaction: reset `LastInputTokens` after compacting so it can't re-fire every
+      turn when the next response reports no usage. + test.
 - [ ] Server: make SSE writes async so a slow client can't block the agent loop
       (turns are now serialized per session; the write path is the remaining piece).
 - [ ] `ProcessExecCap`: consider matching args, not just the binary, in allow-rules.
