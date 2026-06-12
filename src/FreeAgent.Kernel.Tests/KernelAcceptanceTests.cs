@@ -19,6 +19,28 @@ public sealed class KernelAcceptanceTests
     }
 
     [Fact]
+    public async Task CompactionResetsLastInputTokensSoItDoesNotRetriggerOnAUsagelessTurn()
+    {
+        // Script 1 is consumed by the compaction summary call, script 2 by the turn itself.
+        // Neither reports Usage, so LastInputTokens is only what compaction leaves it.
+        var harness = KernelHarness.Create(StreamScript.Text("summary"), StreamScript.Text("done"));
+        harness.State.ContextWindow = 100;
+        harness.State.LastInputTokens = 95; // 95 > 0.8 * 100 → over the compaction threshold
+
+        // More than the kept-turn count so CompactWithSummaryAsync actually drops + summarises.
+        for (var i = 0; i < 5; i++)
+        {
+            harness.State.Messages.Add(new Message(MessageRole.User, $"q{i}"));
+            harness.State.Messages.Add(new Message(MessageRole.Assistant, $"a{i}"));
+        }
+
+        await harness.Runtime.RunTurnAsync("next", CancellationToken.None);
+
+        // Without the reset this would still be 95 and re-trigger compaction every turn.
+        harness.State.LastInputTokens.Should().Be(0);
+    }
+
+    [Fact]
     public async Task ToolCallIsCollectedExecutedInjectedThenFinalTextEndsTheTurn()
     {
         var harness = KernelHarness.Create(

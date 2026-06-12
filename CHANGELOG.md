@@ -6,6 +6,15 @@ All notable changes to FreeAgent are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed — streaming + compaction correctness
+
+- **A malformed SSE `data:` line no longer aborts a turn.** The OpenAI-compatible, Anthropic, and
+  Vertex streaming adapters now skip an unparseable chunk (try/catch → continue) like the Ollama
+  adapter already did, instead of letting a single bad line throw out of the stream.
+- **Compaction resets the token estimate.** After the runtime compacts the transcript it clears
+  `LastInputTokens` (refreshed from the next response's `Usage`), so a stale over-threshold count
+  can't re-trigger compaction every turn when a response reports no usage.
+
 ### Security — symlink workspace-boundary canonicalization
 
 - **A symlink inside the workspace can no longer escape it.** Reads/writes were gated by a *lexical*

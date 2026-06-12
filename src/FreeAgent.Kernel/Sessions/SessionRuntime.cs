@@ -66,6 +66,10 @@ public sealed class SessionRuntime
             var compacted = await Compactor.CompactWithSummaryAsync(_state.Messages, _provider, cancellationToken: cancellationToken);
             _state.Messages.Clear();
             _state.Messages.AddRange(compacted);
+            // Reset the token estimate: the transcript just shrank, so the stale (over-threshold)
+            // count must not re-trip compaction next turn if the upcoming response reports no usage.
+            // It is refreshed from the provider's Usage below.
+            _state.LastInputTokens = 0;
         }
 
         _state.Messages.Add(new Message(MessageRole.User, userText));

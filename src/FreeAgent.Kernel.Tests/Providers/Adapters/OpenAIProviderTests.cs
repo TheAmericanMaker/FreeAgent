@@ -66,6 +66,28 @@ public class OpenAIProviderTests : IDisposable
     }
 
     [Fact]
+    public async Task MalformedSseDataLine_IsSkipped_NotFatalToTheStream()
+    {
+        // A garbage data line between two valid chunks must be skipped, not abort the whole turn.
+        WireResponse("""
+            data: {"id":"1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":"hello"}}]}
+            data: {this is not valid json
+            data: {"id":"2","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":" world"}}]}
+            data: [DONE]
+
+            """);
+
+        _provider = new OpenAIProvider(_httpClient, "https://api.openai.com/v1/");
+
+        var chunks = await _provider.StreamChatAsync(StubRequest(), default).ToListAsync();
+
+        var textChunks = chunks.Where(c => !string.IsNullOrEmpty(c.TextDelta)).ToList();
+        textChunks.Should().HaveCount(2);
+        textChunks[0].TextDelta.Should().Be("hello");
+        textChunks[1].TextDelta.Should().Be(" world");
+    }
+
+    [Fact]
     public async Task ToolCallStreaming_YieldsToolCallDelta()
     {
         WireResponse("""

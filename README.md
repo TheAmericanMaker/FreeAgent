@@ -51,7 +51,7 @@ The largest is OpenAIProvider.cs at 307 lines …
   re-enabled by an allow rule.
 - **Deterministic and testable.** The kernel has no global state and no hidden I/O.
   Providers, tools, the clock-free permission engine, and the filesystem are all
-  interfaces, so the 526-test suite runs entirely against fakes — no network, no model,
+  interfaces, so the 528-test suite runs entirely against fakes — no network, no model,
   no real filesystem.
 - **Crash-safe.** Sessions persist to JSONL through an atomic write-temp → fsync →
   rename → fsync-dir sequence, so a crash mid-write never corrupts the transcript.
@@ -144,7 +144,7 @@ The directory you launch from is the agent's sandbox.
 
 ```bash
 dotnet build FreeAgent.slnx     # build everything (warnings are errors)
-dotnet test  FreeAgent.slnx     # 526 pass + 0 skip
+dotnet test  FreeAgent.slnx     # 528 pass + 0 skip
 OPENAI_API_KEY=sk-... dotnet run --project src/FreeAgent.Host
 ```
 
@@ -521,7 +521,7 @@ clients/tui/                       Full-screen TUI (Bun + React + opentui) — t
   src/ui/Setup.tsx        In-app setup wizard (provider/key/model/working-dir) — no terminal config
 
 src/FreeAgent.Kernel.Tests/        xUnit + FluentAssertions; fakes for every seam
-                                   (526 pass)
+                                   (528 pass)
 
 docs/                              Architecture notes, ADRs, and the reimplementation spec
 ```
@@ -530,7 +530,7 @@ docs/                              Architecture notes, ADRs, and the reimplement
 
 ```bash
 dotnet build FreeAgent.slnx        # warnings are errors
-dotnet test  FreeAgent.slnx        # 526 pass + 0 skip
+dotnet test  FreeAgent.slnx        # 528 pass + 0 skip
 dotnet run --project src/FreeAgent.Host -- --verbose      # interactive CLI
 dotnet run --project src/FreeAgent.Server                 # HTTP + SSE protocol on :5000
 ```

@@ -112,7 +112,10 @@ public sealed class AnthropicProvider : IProvider, IDisposable
                 continue;
 
             var data = line[5..].TrimStart();
-            using var doc = JsonDocument.Parse(data);
+            JsonDocument doc;
+            try { doc = JsonDocument.Parse(data); }
+            catch (JsonException) { continue; } // skip a malformed SSE data line; don't abort the stream
+            using var ownedDoc = doc;
             var root = doc.RootElement;
 
             if (!root.TryGetProperty("type", out var typeProp) || typeProp.ValueKind != JsonValueKind.String)

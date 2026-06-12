@@ -75,7 +75,10 @@ internal static class OpenAICompatStreaming
             if (data == "[DONE]")
                 break;
 
-            using var doc = JsonDocument.Parse(data);
+            JsonDocument doc;
+            try { doc = JsonDocument.Parse(data); }
+            catch (JsonException) { continue; } // skip a malformed SSE data line; don't abort the stream
+            using var ownedDoc = doc;
             var root = doc.RootElement;
 
             // Usage-only chunk has empty choices array
