@@ -69,7 +69,13 @@ public sealed class JsonRpcClient : IAsyncDisposable, IDisposable
         var json = SerializeEnvelope(method, id, writeParams);
         await _transport.WriteLineAsync(json, cancellationToken);
 
-        await using var reg = cancellationToken.Register(() => tcs.TrySetCanceled(cancellationToken));
+        await using var reg = cancellationToken.Register(() =>
+        {
+            // Drop the pending entry too, so a cancelled call doesn't linger in the map until a
+            // (possibly never-arriving) response or disposal. Same lock the read loop uses.
+            lock (_gate) { _pending.Remove(id); }
+            tcs.TrySetCanceled(cancellationToken);
+        });
         return await tcs.Task;
     }
 
