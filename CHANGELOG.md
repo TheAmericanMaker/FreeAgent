@@ -6,6 +6,16 @@ All notable changes to FreeAgent are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed — streaming sentinel + LSP write gate
+
+- **No duplicate end-of-stream chunk.** The OpenAI-compatible parser emits its trailing
+  `IsComplete` sentinel only when the stream never sent a `finish_reason` chunk — so a well-behaved
+  server no longer gets a redundant second completion chunk after `[DONE]` (the sentinel is still
+  emitted as a fallback for finish-reason-less streams).
+- **LSP transport serializes writes.** `StdioLspTransport.WriteLineAsync` now holds a `SemaphoreSlim`
+  write gate (matching the MCP transport), so a concurrent request + notification can't interleave
+  their `Content-Length` header and body bytes on the shared stdin stream.
+
 ### Changed — crash-atomic file edits
 
 - **The editing tools now write crash-safely.** `WriteFile`, `EditFile`, `MultiEditFile`, and

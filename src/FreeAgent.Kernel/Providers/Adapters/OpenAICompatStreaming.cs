@@ -60,6 +60,7 @@ internal static class OpenAICompatStreaming
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var reader = new StreamReader(stream, Encoding.UTF8);
         var idByIndex = new Dictionary<int, string>();
+        var anyComplete = false; // did any chunk already carry IsComplete? (avoids a duplicate end sentinel)
 
         while (await reader.ReadLineAsync(cancellationToken) is { } line)
         {
@@ -102,6 +103,7 @@ internal static class OpenAICompatStreaming
                 && fr.GetString() is { Length: > 0 } finishReason)
             {
                 isComplete = true;
+                anyComplete = true;
                 stopReason = finishReason switch
                 {
                     "stop" => StopReason.EndTurn,
@@ -183,7 +185,10 @@ internal static class OpenAICompatStreaming
             }
         }
 
-        yield return new StreamChunk(null, null, null, null, true);
+        // Fallback end-of-stream sentinel — only if the stream never sent a finish_reason chunk, so a
+        // well-behaved server doesn't get a redundant second IsComplete chunk after [DONE].
+        if (!anyComplete)
+            yield return new StreamChunk(null, null, null, null, true);
     }
 
     private static void WriteMessage(Utf8JsonWriter writer, Message message)

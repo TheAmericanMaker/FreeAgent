@@ -280,6 +280,38 @@ public class OpenAIProviderTests : IDisposable
         chunks.Any(c => c.IsComplete).Should().BeTrue();
     }
 
+    [Fact]
+    public async Task FinishReason_EmitsExactlyOneCompletionChunk_NoDuplicateSentinel()
+    {
+        WireResponse("""
+            data: {"id":"x","choices":[{"index":0,"delta":{"content":"done"},"finish_reason":"stop"}]}
+            data: [DONE]
+
+            """);
+
+        _provider = new OpenAIProvider(_httpClient, "https://api.openai.com/v1/");
+
+        var chunks = await _provider.StreamChatAsync(StubRequest(), default).ToListAsync();
+
+        chunks.Count(c => c.IsComplete).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task NoFinishReason_StillEmitsAFallbackCompletionSentinel()
+    {
+        WireResponse("""
+            data: {"id":"x","choices":[{"index":0,"delta":{"content":"hi"}}]}
+            data: [DONE]
+
+            """);
+
+        _provider = new OpenAIProvider(_httpClient, "https://api.openai.com/v1/");
+
+        var chunks = await _provider.StreamChatAsync(StubRequest(), default).ToListAsync();
+
+        chunks.Any(c => c.IsComplete).Should().BeTrue();
+    }
+
     [Theory]
     [InlineData("stop", StopReason.EndTurn)]
     [InlineData("length", StopReason.MaxTokens)]

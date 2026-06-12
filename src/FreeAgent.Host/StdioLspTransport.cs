@@ -17,6 +17,7 @@ public sealed class StdioLspTransport : ILspTransport
     private readonly Stream _stdin;
     private readonly Stream _stdout;
     private readonly Task _stderrPump;
+    private readonly SemaphoreSlim _writeGate = new(1, 1);
     private int _disposed;
 
     public StdioLspTransport(string command, IReadOnlyList<string> args, string? workingDirectory = null)
@@ -111,9 +112,19 @@ public sealed class StdioLspTransport : ILspTransport
 
         var body = Encoding.UTF8.GetBytes(message);
         var header = Encoding.ASCII.GetBytes($"Content-Length: {body.Length}\r\n\r\n");
-        await _stdin.WriteAsync(header, cancellationToken).ConfigureAwait(false);
-        await _stdin.WriteAsync(body, cancellationToken).ConfigureAwait(false);
-        await _stdin.FlushAsync(cancellationToken).ConfigureAwait(false);
+        // Serialize writes so two concurrent frames (a request + a notification) can't interleave
+        // their header/body bytes on the shared stdin stream.
+        await _writeGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await _stdin.WriteAsync(header, cancellationToken).ConfigureAwait(false);
+            await _stdin.WriteAsync(body, cancellationToken).ConfigureAwait(false);
+            await _stdin.FlushAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _writeGate.Release();
+        }
     }
 
     public void Dispose()
@@ -123,5 +134,6 @@ public sealed class StdioLspTransport : ILspTransport
         catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException) { /* already gone */ }
         try { _stderrPump.Wait(TimeSpan.FromMilliseconds(200)); } catch { }
         _process.Dispose();
+        _writeGate.Dispose();
     }
 }
