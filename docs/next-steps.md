@@ -71,13 +71,17 @@ A checked-in `.freeagent/config.json` ran code on launch: `SessionStart` hooks v
       `File.WriteAllTextAsync`, so an interrupted write can't truncate the user's source. + test.
 - [~] Doom-loop budget vs its "(attempt N of 3)" message — reviewed: behavior is consistent
       (3 recovery reprompts, then halt). No change.
-- [ ] `JsonlSessionStore` in-memory fallback can mask a deleted file on resume.
-- [ ] LSP header read is byte-at-a-time; add a write gate like the MCP transport.
+- [~] `JsonlSessionStore` in-memory fallback on resume — reviewed: the real resume path uses a fresh
+      store + reads the file directly, so the cache is only a same-instance convenience. Left as-is.
+- [x] LSP transport now serializes writes with a `SemaphoreSlim` write gate (like the MCP transport),
+      so a request + notification can't interleave their header/body bytes. _Read-side header parsing
+      is still byte-at-a-time — a perf nicety, left open._
 - [x] Cancelled JSON-RPC call no longer leaves a stale `_pending` entry (removed in the cancel
       registration, under the same lock the read loop uses).
 - [ ] `ModelServerLauncher` PID-reuse race in `IsAlive`/`Stop`.
 - [x] Parse OpenAI `cached_tokens` usage (`prompt_tokens_details.cached_tokens` → `CacheReadTokens`) + test.
-- [ ] Remove the duplicate stream-complete sentinel in the OpenAI-compat parser.
+- [x] OpenAI-compat parser emits the trailing completion sentinel only when no `finish_reason` chunk
+      was seen (no duplicate `IsComplete` after `[DONE]`; still a fallback for finish-reason-less streams) + tests.
 
 ## Tooling / environment
 
