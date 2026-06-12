@@ -66,8 +66,9 @@ A checked-in `.freeagent/config.json` ran code on launch: `SessionStart` hooks v
       `https` to an internal host is still reachable — a narrower vector, noted._
 
 ## Low priority — polish
-- [ ] Crash-atomic writes for `WriteFile` / `ApplyPatch` / `MultiEdit` via
-      `IAtomicFileSystem` (temp-write → rename).
+- [x] Crash-atomic writes for `WriteFile` / `EditFile` / `MultiEditFile` / `ApplyPatch`: they write
+      via `IAtomicFileSystem.WriteAllTextAtomicAsync` (temp → fsync → rename → fsync-dir) instead of
+      `File.WriteAllTextAsync`, so an interrupted write can't truncate the user's source. + test.
 - [~] Doom-loop budget vs its "(attempt N of 3)" message — reviewed: behavior is consistent
       (3 recovery reprompts, then halt). No change.
 - [ ] `JsonlSessionStore` in-memory fallback can mask a deleted file on resume.

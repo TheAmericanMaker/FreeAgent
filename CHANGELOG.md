@@ -6,6 +6,14 @@ All notable changes to FreeAgent are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed — crash-atomic file edits
+
+- **The editing tools now write crash-safely.** `WriteFile`, `EditFile`, `MultiEditFile`, and
+  `ApplyPatch` write through a new `IAtomicFileSystem.WriteAllTextAtomicAsync` (temp → fsync → rename
+  → fsync directory) instead of `File.WriteAllTextAsync`, so a crash or power loss mid-write leaves
+  either the old file or the complete new one — never a truncated/half-written source file (the same
+  guarantee the session store already had).
+
 ### Fixed — provider usage + JSON-RPC cleanup
 
 - **OpenAI cache-hit tokens are now reported.** The OpenAI-compatible adapter reads

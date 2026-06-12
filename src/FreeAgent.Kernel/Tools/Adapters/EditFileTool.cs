@@ -10,6 +10,8 @@ namespace FreeAgent.Kernel;
 /// </summary>
 public sealed class EditFileTool : ITool
 {
+    private readonly IAtomicFileSystem _atomicFs = new LinuxAtomicFileSystem();
+
     public string Name => "EditFile";
 
     public string Description =>
@@ -82,7 +84,7 @@ public sealed class EditFileTool : ITool
 
         try
         {
-            await File.WriteAllTextAsync(path, updated, cancellationToken);
+            await _atomicFs.WriteAllTextAtomicAsync(path, updated, cancellationToken);
             // Snapshot the pre-edit content for /undo (we already have it in `original`).
             context.Session.History.Record(path, original);
         }
