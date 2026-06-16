@@ -6,6 +6,15 @@ All notable changes to FreeAgent are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-06-16
+
+First tagged release. FreeAgent is a Linux-native, modular **agent kernel** for tool-using LLMs with
+three front ends — an interactive CLI (`FreeAgent.Host`), an HTTP + SSE protocol server
+(`FreeAgent.Server`), and a full-screen TUI (`clients/tui`). It speaks six provider APIs
+(OpenAI / Anthropic / Azure / Ollama / Bedrock / Vertex) plus any OpenAI-compatible endpoint, runs
+real tools behind a deterministic capability-permission model with workspace trust, and persists
+sessions crash-safely. Everything listed below ships in 0.1.0.
+
 ### Fixed — streaming sentinel + LSP write gate
 
 - **No duplicate end-of-stream chunk.** The OpenAI-compatible parser emits its trailing
