@@ -84,4 +84,26 @@ public sealed class ProviderConfigTests
         var config = ProviderConfig.Load(file.Path);
         config.BaseUrl.Should().BeNull();
     }
+
+    [Fact]
+    public void VertexSettingsUseApiVersionFromProviderSectionAsLocation()
+    {
+        using var file = new TempFile("""
+            {
+              "provider": "vertex",
+              "vertex": {
+                "baseUrl": "my-project",
+                "apiVersion": "europe-west1",
+                "model": "claude-3-7-sonnet@20250219"
+              }
+            }
+            """);
+
+        var config = ProviderConfig.Load(file.Path);
+        var settings = config.SettingsFor("vertex");
+
+        settings.BaseUrl.Should().Be("my-project");
+        settings.ApiVersion.Should().Be("europe-west1");
+        settings.Model.Should().Be("claude-3-7-sonnet@20250219");
+    }
 }

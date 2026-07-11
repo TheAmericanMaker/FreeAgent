@@ -92,12 +92,14 @@ xdg_cache="${XDG_CACHE_HOME:-$HOME/.cache}"
 pid_file="$xdg_cache/freeagent/model-server.pid"
 if [[ -f "$pid_file" ]]; then
   pid="$(cat "$pid_file" 2>/dev/null | tr -d '[:space:]' || true)"
-  if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+  if [[ -n "$pid" ]] && ! [[ "$pid" =~ ^[0-9]+$ ]]; then
+    warn "Ignoring malformed model-server pid file: $pid_file"
+  elif [[ -n "$pid" ]] && [[ "$pid" -gt 0 ]] && kill -0 -- "$pid" 2>/dev/null; then
     warn "A /serve local model server is running (pid $pid)."
     if [[ "$PURGE" -eq 1 ]] || ask_yes_no "Stop it now" "Y"; then
-      kill "$pid" 2>/dev/null || true
+      kill -- "$pid" 2>/dev/null || true
       sleep 0.2
-      kill -0 "$pid" 2>/dev/null && kill -9 "$pid" 2>/dev/null || true
+      kill -0 -- "$pid" 2>/dev/null && kill -9 -- "$pid" 2>/dev/null || true
       ok "Stopped pid $pid."
     fi
   fi
