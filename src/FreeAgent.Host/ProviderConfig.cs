@@ -3,7 +3,7 @@ using FreeAgent.Kernel;
 
 namespace FreeAgent.Host;
 
-/// <summary>Per-provider connection settings. <see cref="ApiVersion"/> is currently Azure-only.</summary>
+/// <summary>Per-provider connection settings. <see cref="ApiVersion"/> is used by Azure and Vertex.</summary>
 public sealed record ProviderSettings(string? BaseUrl, string? ApiKey, string? Model, string? ApiVersion = null);
 
 /// <summary>
@@ -102,7 +102,10 @@ public sealed class ProviderConfig
                 Model:   Resolve(
                     Environment.GetEnvironmentVariable("FREEMODEL") ?? Environment.GetEnvironmentVariable("VERTEX_MODEL"),
                     Vertex?.Model, VertexDefaultModel),
-                ApiVersion: Resolve(Environment.GetEnvironmentVariable("VERTEX_LOCATION"), VertexLocation, VertexDefaultLocation));
+                ApiVersion: Resolve(
+                    Environment.GetEnvironmentVariable("VERTEX_LOCATION"),
+                    Vertex?.ApiVersion ?? VertexLocation,
+                    VertexDefaultLocation));
         }
 
         if (string.Equals(provider, "bedrock", StringComparison.OrdinalIgnoreCase))

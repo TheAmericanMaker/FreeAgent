@@ -113,10 +113,37 @@ public sealed class InteractiveSetupTests
         // openai section is untouched.
         root.GetProperty("openai").GetProperty("apiKey").GetString().Should().Be("keep-this");
         root.GetProperty("openai").GetProperty("model").GetString().Should().Be("gpt-4o-mini");
-        // anthropic section was replaced with the new answers.
+        // anthropic section was updated with the new answers.
         root.GetProperty("anthropic").GetProperty("apiKey").GetString().Should().Be("new-ant-key");
         // top-level default provider stays at the prior value because setAsDefault was false.
         root.GetProperty("provider").GetString().Should().Be("openai");
+    }
+
+    [Fact]
+    public void MergeProviderSectionPreservesExistingValuesWhenAnswersArePartial()
+    {
+        var existing = """
+            {
+              "provider": "anthropic",
+              "anthropic": {
+                "apiKey": "keep-secret",
+                "baseUrl": "https://api.anthropic.com",
+                "model": "old-model"
+              }
+            }
+            """;
+
+        var merged = InteractiveSetup.MergeProviderSection(
+            existingJson: existing,
+            provider: "anthropic",
+            answers: new Dictionary<string, string> { ["model"] = "new-model" },
+            setAsDefault: true);
+
+        using var doc = JsonDocument.Parse(merged);
+        var anthropic = doc.RootElement.GetProperty("anthropic");
+        anthropic.GetProperty("apiKey").GetString().Should().Be("keep-secret");
+        anthropic.GetProperty("baseUrl").GetString().Should().Be("https://api.anthropic.com");
+        anthropic.GetProperty("model").GetString().Should().Be("new-model");
     }
 
     [Fact]
@@ -170,6 +197,48 @@ public sealed class InteractiveSetupTests
     }
 
     [Fact]
+    public void MergeProviderSectionDoesNotLetBlankAnswersEraseExistingValues()
+    {
+        var existing = """{"openai":{"apiKey":"sk-old","model":"gpt-4o"}}""";
+
+        var merged = InteractiveSetup.MergeProviderSection(
+            existingJson: existing,
+            provider: "openai",
+            answers: new Dictionary<string, string>
+            {
+                ["apiKey"] = "",
+                ["model"] = "  ",
+            },
+            setAsDefault: false);
+
+        using var doc = JsonDocument.Parse(merged);
+        var openai = doc.RootElement.GetProperty("openai");
+        openai.GetProperty("apiKey").GetString().Should().Be("sk-old");
+        openai.GetProperty("model").GetString().Should().Be("gpt-4o");
+    }
+
+    [Fact]
+    public void ExistingProviderValueReadsProviderSectionSlots()
+    {
+        var existing = """{"vertex":{"baseUrl":"my-project","apiVersion":"europe-west1"}}""";
+
+        InteractiveSetup.ExistingProviderValue(existing, "vertex", "baseUrl").Should().Be("my-project");
+        InteractiveSetup.ExistingProviderValue(existing, "vertex", "apiVersion").Should().Be("europe-west1");
+        InteractiveSetup.ExistingProviderValue(existing, "vertex", "model").Should().BeNull();
+    }
+
+    [Fact]
+    public void ExistingProviderValueFallsBackToOpenAiLegacyFlatFields()
+    {
+        var existing = """{"apiKey":"sk-legacy","baseUrl":"https://gateway.example/v1","model":"custom"}""";
+
+        InteractiveSetup.ExistingProviderValue(existing, "openai", "apiKey").Should().Be("sk-legacy");
+        InteractiveSetup.ExistingProviderValue(existing, "openai", "baseUrl").Should().Be("https://gateway.example/v1");
+        InteractiveSetup.ExistingProviderValue(existing, "openai", "model").Should().Be("custom");
+        InteractiveSetup.ExistingProviderValue(existing, "anthropic", "apiKey").Should().BeNull();
+    }
+
+    [Fact]
     public void ResolveDefaultPrefersEnvironmentFallbackOverExplicitDefault()
     {
         const string varName = "FREEAGENT_TEST_ENV_FALLBACK_VAR_XYZ";
@@ -183,6 +252,13 @@ public sealed class InteractiveSetupTests
         {
             Environment.SetEnvironmentVariable(varName, null);
         }
+    }
+
+    [Fact]
+    public void ResolveDefaultUsesExistingValueBeforeExplicitDefault()
+    {
+        var q = new SetupQuestion("model", "Model", Default: "fallback-default");
+        InteractiveSetup.ResolveDefault(q, existingValue: "from-existing").Should().Be("from-existing");
     }
 
     [Fact]

@@ -102,7 +102,8 @@ public static class InteractiveSetup
     /// Merge a freshly-collected provider section into the existing config JSON. The wizard updates
     /// only the requested provider — other sections (including any legacy flat fields) are
     /// preserved unchanged so a user with both <c>openai</c> and <c>anthropic</c> configured
-    /// doesn't lose one when re-running setup for the other. Pure — no I/O.
+    /// doesn't lose one when re-running setup for the other. Existing keys in the same provider
+    /// section are also kept unless the new answers replace them. Pure — no I/O.
     /// </summary>
     public static string MergeProviderSection(string? existingJson, string provider, IReadOnlyDictionary<string, string> answers, bool setAsDefault)
     {
@@ -117,14 +118,16 @@ public static class InteractiveSetup
             catch (JsonException) { root = new JsonObject(); }
         }
 
-        // Per-provider section.
-        var section = new JsonObject();
+        if (root[provider] is not JsonObject section)
+        {
+            section = new JsonObject();
+            root[provider] = section;
+        }
         foreach (var (key, value) in answers)
         {
             if (string.IsNullOrWhiteSpace(value)) continue;
             section[key] = value;
         }
-        root[provider] = section;
 
         if (setAsDefault)
             root["provider"] = provider;
@@ -133,16 +136,42 @@ public static class InteractiveSetup
     }
 
     /// <summary>
-    /// Resolve a question's pre-filled default: explicit ctor default → env-var fallback → null.
-    /// Pure helper so the I/O layer can render the right hint inline.
+    /// Read a provider-section value from an existing config document. Pure helper so setup can
+    /// preserve values when it is re-run.
     /// </summary>
-    public static string? ResolveDefault(SetupQuestion q)
+    public static string? ExistingProviderValue(string? existingJson, string provider, string slot)
+    {
+        if (string.IsNullOrWhiteSpace(existingJson)) return null;
+        try
+        {
+            var root = JsonNode.Parse(existingJson)?.AsObject();
+            var providerValue = root?[provider]?[slot]?.GetValue<string>();
+            if (!string.IsNullOrWhiteSpace(providerValue))
+                return providerValue;
+
+            return string.Equals(provider, "openai", StringComparison.OrdinalIgnoreCase)
+                ? root?[slot]?.GetValue<string>()
+                : null;
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Resolve a question's pre-filled default: env-var fallback → existing config → explicit ctor
+    /// default → null. Pure helper so the I/O layer can render the right hint inline.
+    /// </summary>
+    public static string? ResolveDefault(SetupQuestion q, string? existingValue = null)
     {
         if (!string.IsNullOrWhiteSpace(q.EnvFallback)
             && Environment.GetEnvironmentVariable(q.EnvFallback) is { Length: > 0 } env)
         {
             return env;
         }
+        if (!string.IsNullOrWhiteSpace(existingValue))
+            return existingValue;
         return q.Default;
     }
 
@@ -181,11 +210,13 @@ public static class InteractiveSetup
         Console.WriteLine("Press Enter to accept the default in [brackets]. Leave blank to skip a value.");
         Console.WriteLine();
 
+        var configPath = ProviderConfig.ConfigPath();
+        var existing = File.Exists(configPath) ? await File.ReadAllTextAsync(configPath, cancellationToken) : null;
         var answers = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var question in QuestionsFor(provider))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var def = ResolveDefault(question);
+            var def = ResolveDefault(question, ExistingProviderValue(existing, provider, question.Slot));
             var label = question.Secret
                 ? $"  {question.PromptLabel} (input hidden{(def is null ? "" : "; press Enter to keep existing")}): "
                 : $"  {question.PromptLabel}{(def is null ? "" : $" [{def}]")}: ";
@@ -198,8 +229,6 @@ public static class InteractiveSetup
 
         var setAsDefault = AskYesNo($"Set '{provider}' as the default provider for new shells", defaultYes: true);
 
-        var configPath = ProviderConfig.ConfigPath();
-        var existing = File.Exists(configPath) ? await File.ReadAllTextAsync(configPath, cancellationToken) : null;
         var merged = MergeProviderSection(existing, provider, answers, setAsDefault);
 
         Directory.CreateDirectory(Path.GetDirectoryName(configPath)!);
