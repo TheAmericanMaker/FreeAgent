@@ -98,9 +98,17 @@ jobs:
           cd dist
           sha256sum ./*.nupkg ./freeagent-* > SHA256SUMS
 
+      - name: NuGet login (OIDC → temp API key)
+        uses: NuGet/login@ebc737b6fc418a6ca0073cf116ec8dc156d8b81e # v1
+        id: nuget-login
+        with:
+          user: theamericanmaker
+
       - name: Publish to NuGet (Trusted Publishing)
+        env:
+          NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
         run: |
-          dotnet nuget push dist/*.nupkg --source https://api.nuget.org/v3/index.json --skip-duplicate
+          dotnet nuget push dist/*.nupkg --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
 
       - name: Create GitHub Release and attach assets
         uses: softprops/action-gh-release@fe965f7af51af5f2602596916f38a38df2e33de0 # v3.0.2
