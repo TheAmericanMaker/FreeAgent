@@ -56,6 +56,48 @@ public static class ConfigEndpoints
             return Results.Ok(models);
         });
 
+        // Fetch live models from an Ollama host (local or Cloud). Used by the TUI setup wizard
+        // so users can pick from a list instead of typing a model name blind.
+        app.MapGet("/models/live", async (string? provider, string? baseUrl, string? apiKey, CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(provider) || string.IsNullOrWhiteSpace(baseUrl))
+                return Results.Ok(Array.Empty<string>());
+
+            if (!string.Equals(provider, "ollama", StringComparison.OrdinalIgnoreCase))
+                return Results.Ok(Array.Empty<string>());
+
+            try
+            {
+                using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+                using var req = new HttpRequestMessage(HttpMethod.Get, baseUrl.TrimEnd('/') + "/api/tags");
+                if (!string.IsNullOrWhiteSpace(apiKey))
+                    req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
+                using var resp = await http.SendAsync(req, ct);
+                if (!resp.IsSuccessStatusCode)
+                    return Results.Ok(Array.Empty<string>());
+                var json = await resp.Content.ReadAsStringAsync(ct);
+                using var doc = System.Text.Json.JsonDocument.Parse(json);
+                var models = new List<string>();
+                if (doc.RootElement.TryGetProperty("models", out var arr) && arr.ValueKind == System.Text.Json.JsonValueKind.Array)
+                {
+                    foreach (var m in arr.EnumerateArray())
+                    {
+                        if (m.TryGetProperty("name", out var name) && name.ValueKind == System.Text.Json.JsonValueKind.String)
+                        {
+                            var s = name.GetString();
+                            if (!string.IsNullOrWhiteSpace(s))
+                                models.Add(s);
+                        }
+                    }
+                }
+                return Results.Ok(models);
+            }
+            catch
+            {
+                return Results.Ok(Array.Empty<string>());
+            }
+        });
+
         app.MapGet("/config", (ProviderFactory factory) =>
         {
             var cfg = factory.Config;
