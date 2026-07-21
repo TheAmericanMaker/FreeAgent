@@ -12,7 +12,7 @@ phasing decision that made the kernel headless and added the protocol server, se
 
 Everything the kernel touches at runtime is behind an interface, and the kernel
 holds no global or static mutable state. That is what makes it deterministic and
-fully testable against fakes (544 passing tests today).
+fully testable against fakes (550 passing tests today).
 
 ```
                         ┌─────────────────────────────────────────────────┐
@@ -350,8 +350,9 @@ adding a hard OTel dependency to the kernel.
 
 Slash commands are dispatched on input that starts with `/`. Each command's metadata is
 registered in `HostCommands.BuildDefaultRegistry` (a `CommandRegistry` instance) so `/commands
-[query]` and the future TUI palette bind against the same source. New commands should add both
-the `case "/foo":` in `Handle` and the matching `CommandDefinition` in the registry.
+[query]` can search the host's complete command set. New host commands should add both the
+`case "/foo":` in `Handle` and the matching `CommandDefinition` in the registry. Protocol
+frontends, including the shipped TUI, own their client-side command dispatch separately.
 
 ## Testing model
 

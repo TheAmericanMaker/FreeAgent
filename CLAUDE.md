@@ -213,7 +213,7 @@ only, *not* persisted): `PlanMode`, `SessionApprovals` (granted capability types
   in the host. Tools you list must already be registered in the parent registry.
 - **A new host command:** add a `case "/foo":` in `HostCommands.Handle`, implement the body as a
   static method (testable), and register the metadata in `HostCommands.BuildDefaultRegistry` so
-  `/commands` and the future TUI palette pick it up.
+  `/commands` remains complete. Protocol clients maintain their own client-side command handling.
 
 ## Reference docs
 

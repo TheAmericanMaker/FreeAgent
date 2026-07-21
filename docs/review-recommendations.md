@@ -1,5 +1,10 @@
 # FreeAgent — Project Review & Recommendations (against `dev`)
 
+> **Historical pre-release review (2026-05-29).** This document preserves the findings and
+> decisions that drove subsequent remediation. Several gaps described below are fixed on `main`.
+> Use [README.md](../README.md), [ROADMAP.md](../ROADMAP.md), and
+> [CHANGELOG.md](../CHANGELOG.md) for current project status.
+
 _Review date: 2026-05-29. Branch under review: the up-to-date `dev` line (this branch
 was re-cut from `origin/dev`). Static review only — no .NET SDK was available, so the
 build and the ~500-test suite were not run here; findings are from reading the code.

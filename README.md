@@ -1,14 +1,18 @@
 # FreeAgent
 
 A Linux-native, modular **agent kernel** for tool-using LLMs, with an interactive
-command-line host. FreeAgent talks to any **OpenAI-compatible** chat-completions
-endpoint, streams responses, lets the model call real tools (read files, write
-files, run processes), and enforces a deterministic capability-based permission
-model around every one of those calls.
+CLI, an HTTP + SSE protocol server, and a full-screen terminal UI. FreeAgent has
+native adapters for six provider APIs and also talks to **OpenAI-compatible**
+chat-completions endpoints. It streams responses, lets the model call real tools
+(read files, write files, run processes), and enforces a deterministic
+capability-based permission model around every one of those calls.
 
 The kernel is the product: a small, well-tested core (`FreeAgent.Kernel`) that owns
 the turn loop, the tool-execution pipeline, the permission engine, and crash-safe
-session persistence. The CLI (`FreeAgent.Host`) is a thin shell over it.
+session persistence. The CLI (`FreeAgent.Host`) and server (`FreeAgent.Server`) are
+thin shells over it; `clients/tui` consumes the server protocol.
+
+Licensed under [`AGPL-3.0-only`](LICENSE). See [NOTICE](NOTICE) for provenance.
 
 ```
 You ▸ list the .cs files under src and tell me which is largest
@@ -36,6 +40,8 @@ The largest is OpenAIProvider.cs at 307 lines …
 - [Development](#development)
 - [Design decisions](#design-decisions)
 - [Roadmap & non-goals](#roadmap--non-goals)
+- [Security](#security)
+- [License and provenance](#license-and-provenance)
 
 ---
 
@@ -51,7 +57,7 @@ The largest is OpenAIProvider.cs at 307 lines …
   re-enabled by an allow rule.
 - **Deterministic and testable.** The kernel has no global state and no hidden I/O.
   Providers, tools, the clock-free permission engine, and the filesystem are all
-  interfaces, so the 544-test suite runs entirely against fakes — no network, no model,
+  interfaces, so the 550-test suite runs entirely against fakes — no network, no model,
   no real filesystem.
 - **Crash-safe.** Sessions persist to JSONL through an atomic write-temp → fsync →
   rename → fsync-dir sequence, so a crash mid-write never corrupts the transcript.
@@ -144,7 +150,7 @@ The directory you launch from is the agent's sandbox.
 
 ```bash
 dotnet build FreeAgent.slnx     # build everything (warnings are errors)
-dotnet test  FreeAgent.slnx     # 544 pass + 0 skip
+dotnet test  FreeAgent.slnx     # 550 pass + 0 skip
 OPENAI_API_KEY=sk-... dotnet run --project src/FreeAgent.Host
 ```
 
@@ -521,7 +527,7 @@ clients/tui/                       Full-screen TUI (Bun + React + opentui) — t
   src/ui/Setup.tsx        In-app setup wizard (provider/key/model/working-dir) — no terminal config
 
 src/FreeAgent.Kernel.Tests/        xUnit + FluentAssertions; fakes for every seam
-                                   (544 pass)
+                                   (550 pass)
 
 docs/                              Architecture notes, ADRs, and the reimplementation spec
 ```
@@ -530,7 +536,7 @@ docs/                              Architecture notes, ADRs, and the reimplement
 
 ```bash
 dotnet build FreeAgent.slnx        # warnings are errors
-dotnet test  FreeAgent.slnx        # 544 pass + 0 skip
+dotnet test  FreeAgent.slnx        # 550 pass + 0 skip
 dotnet run --project src/FreeAgent.Host -- --verbose      # interactive CLI
 dotnet run --project src/FreeAgent.Server                 # HTTP + SSE protocol on :5000
 ```
@@ -546,11 +552,13 @@ or real filesystem; the protocol server is tested with `WebApplicationFactory` i
 process. See `docs/architecture.md` for a deeper tour and `docs/usage.md` for host
 details and recipes.
 
-**Releasing.** Push a `v*` tag (e.g. `git tag v0.1.0 && git push --tags`) to trigger
-`.github/workflows/release.yml`: it tests, packs the tool, attaches self-contained
-binaries to the GitHub Release, and—if a `NUGET_API_KEY` secret is set—publishes to
-NuGet so others can `dotnet tool install -g FreeAgent`. (NuGet IDs are global; if
-`FreeAgent` is taken, change `PackageId` in `src/FreeAgent.Host/FreeAgent.Host.csproj`.)
+**Releasing.** A strict `vMAJOR.MINOR.PATCH` tag triggers `.github/workflows/release.yml`. The
+workflow requires the tag, project version, and a dated changelog section to agree; runs the .NET
+and TUI gates; packs and smoke-installs the tool; publishes self-contained binaries; and attaches
+SHA-256 checksums. If `NUGET_API_KEY` is configured it also publishes to NuGet; otherwise that step
+is explicitly skipped. Preparing or merging a candidate does not publish anything. (NuGet IDs are
+global; if `FreeAgent` is taken, change `PackageId` in
+`src/FreeAgent.Host/FreeAgent.Host.csproj`.)
 
 ## Design decisions
 
@@ -570,10 +578,9 @@ The full behavioral contract the kernel implements is in
 See [`ROADMAP.md`](ROADMAP.md) for the full backlog and what's shipped, and
 [`CHANGELOG.md`](CHANGELOG.md) for a feature-by-feature log. The "near-term" and
 "larger features" sections of the roadmap are now essentially complete; the
-remaining unchecked items all need either the TypeScript / Bun ecosystem
-(opentui TUI client, palette UI, status-line repositioning, colored diff view)
-or external platform integrations (VS Code, ACP, web, Slack/GitHub) that are
-clients of the protocol surface rather than additions to the kernel.
+remaining unchecked items are primarily deeper editor and remote integrations
+(ACP, web, Slack/GitHub) that are clients of the protocol surface rather than
+additions to the kernel.
 
 **Now shipped (since the original "out of scope" list above was written):**
 sub-agents, playbooks, **MCP client**, **LSP client** (both smoke tests now
@@ -591,13 +598,24 @@ model server lifecycle** (`/serve start|stop|status`) plus
 **`StopReason` + `Model` + `ModelCatalog`** provider-model scaffolding,
 the **`FreeAgent.Server` HTTP + SSE protocol surface** (per ADR 0005,
 with an OpenAPI spec served at `/openapi/v1.json` and an optional
-bearer-token gate), and a **`CommandRegistry` + `/commands`** palette
-layer for the future TUI to bind against.
+bearer-token gate), a **`CommandRegistry` + `/commands`** palette layer, and the
+full-screen **Bun/React/opentui TUI** with in-app setup, streaming chat, settings,
+and command handling.
 
-Still **deliberately deferred:** a full-screen TUI (planned as a Bun/opentui
-client over the headless-core protocol — see ADR 0005), editor &
-remote integrations (VS Code, ACP, web, Slack/GitHub apps), multimodal
-generation, callers/blast-radius semantic actions in Roslyn, a
-Windows-shaped backend for `/serve`'s pid-file model, and the command
-palette **UI** (the registry layer is in; the visual palette ships
-with the TUI).
+Still **deliberately deferred:** production-grade editor and remote integrations
+(the VS Code client remains a scaffold; ACP, web, Slack, and GitHub apps are not
+implemented), first-class multimodal tools, and a Windows-shaped backend for
+`/serve`'s pid-file model.
+
+## Security
+
+Please report suspected vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
+FreeAgent executes user-authorized tools, hooks, and protocol integrations, so reports should
+identify behavior outside the documented permission or trust boundary.
+
+## License and provenance
+
+FreeAgent is licensed under the [GNU Affero General Public License v3.0 only](LICENSE)
+(`AGPL-3.0-only`). See [NOTICE](NOTICE) for provenance and attribution, including the
+OpenMonoAgent.ai behavioral and architectural audit lineage. Contributions are welcome under the
+same terms; see [CONTRIBUTING.md](CONTRIBUTING.md).

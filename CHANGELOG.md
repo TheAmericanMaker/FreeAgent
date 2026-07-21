@@ -6,14 +6,24 @@ All notable changes to FreeAgent are recorded here. The format follows
 
 ## [Unreleased]
 
-## [0.1.0] - 2026-06-16
+## [0.1.0] - TBD
 
-First tagged release. FreeAgent is a Linux-native, modular **agent kernel** for tool-using LLMs with
+Prepared, unpublished candidate for the first tagged release. Replace `TBD` with the release date
+before pushing `v0.1.0`; the release workflow rejects an undated changelog. FreeAgent is a
+Linux-native, modular **agent kernel** for tool-using LLMs with
 three front ends — an interactive CLI (`FreeAgent.Host`), an HTTP + SSE protocol server
 (`FreeAgent.Server`), and a full-screen TUI (`clients/tui`). It speaks six provider APIs
 (OpenAI / Anthropic / Azure / Ollama / Bedrock / Vertex) plus any OpenAI-compatible endpoint, runs
 real tools behind a deterministic capability-permission model with workspace trust, and persists
-sessions crash-safely. Everything listed below ships in 0.1.0.
+sessions crash-safely. Everything listed below is planned for 0.1.0.
+
+### Security and publication readiness
+
+- Licensed under `AGPL-3.0-only`, with provenance, contribution, conduct, and private security-
+  reporting documentation included in the source and package.
+- Pinned `Microsoft.OpenApi` to 2.7.5 to resolve GHSA-v5pm-xwqc-g5wc without disabling NuGet audit.
+- CI and release gates now cover the .NET solution, the locked Bun TUI, release metadata, package
+  installation, and release-asset checksums.
 
 ### Fixed — streaming sentinel + LSP write gate
 

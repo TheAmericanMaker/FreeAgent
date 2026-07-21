@@ -219,7 +219,7 @@ full list with fuzzy filter, or `/help` for the inline cheat sheet.
 | `/serve download <url-or-hf:owner/repo/path.gguf> [--name <local-name>]` | Stream a GGUF into the local catalog. `HF_TOKEN` is forwarded for gated repos. |
 | `/serve models`                    | List downloaded GGUFs.                                                                    |
 | `/fork`                            | Snapshot the current transcript to `session-fork-<id>.jsonl` for branching.               |
-| `/commands [query]`                | Fuzzy command palette (same registry the future TUI binds against).                       |
+| `/commands [query]`                | Fuzzy-search the console host's command registry.                                         |
 
 ### Verbose mode
 

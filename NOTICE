@@ -1,0 +1,21 @@
+FreeAgent
+Copyright (c) 2026 James Sesler
+
+FreeAgent is licensed under the GNU Affero General Public License version 3 only
+(AGPL-3.0-only). See LICENSE for the complete terms.
+
+Provenance and behavioral reference
+-----------------------------------
+FreeAgent is a ground-up product reimplementation informed by behavioral and
+architectural audits of OpenMonoAgent.ai:
+
+  https://github.com/StartupHakk/OpenMonoAgent.ai
+
+OpenMonoAgent.ai is distributed under the GNU Affero General Public License
+version 3. The curated audit artifacts under docs/codecarto/ preserve observed
+behavior, architecture, protocols, and defect findings used as implementation
+guidance. FreeAgent is not represented as a source-level port, and this notice
+does not replace a legal determination of copyright provenance.
+
+Third-party libraries remain under their respective licenses. Their inclusion
+does not change FreeAgent's license.

@@ -1,12 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
     <RootNamespace>FreeAgent.Host</RootNamespace>
-    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
   </PropertyGroup>
 
   <!-- Packaging as a .NET global tool: `dotnet tool install -g freeagent` exposes `freeagent`. -->
@@ -17,6 +12,7 @@
     <PackageId>FreeAgent</PackageId>
     <Version>0.1.0</Version>
     <Authors>James Sesler</Authors>
+    <PackageLicenseExpression>AGPL-3.0-only</PackageLicenseExpression>
     <Description>FreeAgent — a Linux-native, modular agent kernel and interactive CLI for tool-using LLMs over any OpenAI-compatible endpoint.</Description>
     <PackageProjectUrl>https://github.com/TheAmericanMaker/FreeAgent</PackageProjectUrl>
     <RepositoryUrl>https://github.com/TheAmericanMaker/FreeAgent</RepositoryUrl>
@@ -27,6 +23,8 @@
 
   <ItemGroup>
     <None Include="..\..\README.md" Pack="true" PackagePath="\" Visible="false" />
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="\" Visible="false" />
+    <None Include="..\..\NOTICE" Pack="true" PackagePath="\" Visible="false" />
   </ItemGroup>
 
   <ItemGroup>

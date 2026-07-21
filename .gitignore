@@ -18,3 +18,7 @@ Thumbs.db
 .pi/
 .codecarto/
 .codecarto.backup-*/
+
+# Python release tooling
+__pycache__/
+*.pyc
