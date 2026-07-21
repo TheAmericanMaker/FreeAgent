@@ -159,6 +159,13 @@ export class FreeAgentClient {
     return this.getJson<ModelInfo[]>(`/models${q}`);
   }
 
+  async getLiveModels(provider: string, baseUrl: string, apiKey?: string): Promise<string[]> {
+    const params = new URLSearchParams({ provider });
+    if (baseUrl) params.set('baseUrl', baseUrl);
+    if (apiKey) params.set('apiKey', apiKey);
+    return this.getJson<string[]>(`/models/live?${params.toString()}`);
+  }
+
   async getConfig(): Promise<ConfigView> {
     return this.getJson<ConfigView>('/config');
   }

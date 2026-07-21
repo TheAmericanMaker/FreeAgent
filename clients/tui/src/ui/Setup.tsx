@@ -28,6 +28,8 @@ export function Setup({ client, config, onDone, firstRun, onCancel }: SetupProps
   const [provider, setProvider] = useState<string>(config.activeProvider);
   const [form, setForm] = useState<Record<string, string>>({});
   const [models, setModels] = useState<ModelInfo[]>([]);
+  const [liveModels, setLiveModels] = useState<string[]>([]);
+  const [liveModelsLoading, setLiveModelsLoading] = useState(false);
   const [workingDir, setWorkingDir] = useState('');
   const [focus, setFocus] = useState(0);
   const [test, setTest] = useState<ProbeResult | null>(null);
@@ -145,7 +147,18 @@ export function Setup({ client, config, onDone, firstRun, onCancel }: SetupProps
             <Field key={f.slot} label={f.label} secret={f.secret} value={form[f.slot] ?? ''} focused={focus === i} onInput={(v) => setField(f.slot, v)} onSubmit={() => setFocus((x) => x + 1)} />
           ))}
           <ActionRow label={activity === 'Testing connection…' ? 'Testing…' : 'Test connection'} focused={focus === credentialFields.length} onRun={runTest} />
-          <ActionRow label="Continue → choose model" focused={focus === credentialFields.length + 1} onRun={() => { setFocus(0); setStep('model'); }} />
+          <ActionRow label="Continue → choose model" focused={focus === credentialFields.length + 1} onRun={() => {
+            setFocus(0);
+            setStep('model');
+            // Fetch live models from the configured host (Ollama Cloud or local).
+            if (provider === 'ollama' && form.baseUrl) {
+              setLiveModelsLoading(true);
+              client.getLiveModels(provider, form.baseUrl, form.apiKey || undefined)
+                .then((m) => setLiveModels(m))
+                .catch(() => setLiveModels([]))
+                .finally(() => setLiveModelsLoading(false));
+            }
+          }} />
           {!firstRun && <ActionRow label="Cancel" focused={focus === credentialFields.length + 2} onRun={onCancel} />}
           {test && <text style={{ marginTop: 1, fg: test.ok ? theme.ok : theme.error }} content={`${test.ok ? '✓' : '✗'} ${test.message}`} />}
           <Hint />
@@ -156,7 +169,21 @@ export function Setup({ client, config, onDone, firstRun, onCancel }: SetupProps
         <box style={{ flexDirection: 'column' }}>
           <text style={{ fg: theme.text, marginBottom: 1 }} content="3 / 3   Model & working directory" />
           <Field label="Model" secret={false} value={form.model ?? ''} focused={focus === 0} onInput={(v) => setField('model', v)} onSubmit={() => setFocus(1)} />
-          {models.length > 0 && (
+          {liveModelsLoading && (
+            <text style={{ fg: theme.textFaint, marginBottom: 1 }} content="  Fetching available models…" />
+          )}
+          {!liveModelsLoading && liveModels.length > 0 && (
+            <box style={{ flexDirection: 'column', marginBottom: 1 }}>
+              <text style={{ fg: theme.textFaint, marginBottom: 0 }} content="  Available models (↑↓ to select, Enter to use):" />
+              <OptionSelect
+                focused={false}
+                options={liveModels.map<SelectOption>((m) => ({ name: m, description: '', value: m }))}
+                onSelect={(_i, opt) => opt && setField('model', String(opt.value))}
+                style={{ height: Math.min(liveModels.length, 8), backgroundColor: theme.panel, focusedBackgroundColor: theme.panel, selectedBackgroundColor: theme.accentDim, descriptionColor: theme.textFaint }}
+              />
+            </box>
+          )}
+          {models.length > 0 && liveModels.length === 0 && !liveModelsLoading && (
             <text style={{ fg: theme.textFaint, marginBottom: 1 }} content={`known: ${models.map((m) => m.id).join(', ')}`} />
           )}
           <Field label="Working dir" secret={false} value={workingDir} focused={focus === 1} placeholder="(server's directory)" onInput={setWorkingDir} onSubmit={() => setFocus(2)} />
