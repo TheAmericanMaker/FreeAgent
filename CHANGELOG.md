@@ -6,6 +6,28 @@ All notable changes to FreeAgent are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-07-21
+
+Post-release polish and NuGet Trusted Publishing.
+
+### Added
+
+- **One-line installer** (`scripts/get.sh`) — detects Fedora/Ubuntu/macOS, installs the .NET 10 SDK
+  if missing, builds and installs the `freeagent` global tool, and runs the setup wizard. Supports
+  `--tui` to also set up the full-screen TUI.
+- **Ollama Cloud model listing in setup** — when an API key is provided, the setup wizard fetches
+  available models from `/api/tags` and shows a numbered list to pick from.
+- **Ollama Cloud direct API support** — the Ollama provider now accepts an optional API key and sends
+  a `Bearer` auth header, enabling direct access to `https://ollama.com` without a local daemon.
+
+### Changed
+
+- **NuGet Trusted Publishing** — replaced the `NUGET_API_KEY` secret with OIDC-based Trusted Publishing.
+  The release workflow now publishes to NuGet via a temporary credential exchange — no long-lived
+  API key to manage.
+- **GitHub Release action** — updated `softprops/action-gh-release` from v2 to v3.0.2 (Node 24).
+- **Branch protection** — `main` now requires `dotnet` and `tui` CI checks to pass before merge.
+
 ## [0.1.0] - 2026-07-20
 
 Prepared, unpublished candidate for the first tagged release. Replace `TBD` with the release date
