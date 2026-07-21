@@ -108,7 +108,7 @@ jobs:
           fi
 
       - name: Create GitHub Release and attach assets
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        uses: softprops/action-gh-release@fe965f7af51af5f2602596916f38a38df2e33de0 # v3.0.2
         with:
           files: |
             dist/*.nupkg
