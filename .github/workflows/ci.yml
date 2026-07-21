@@ -1,25 +1,55 @@
 name: ci
 
-# Build and test on every push and pull request. The build treats warnings as errors and the
-# test suite runs entirely against fakes (no network, model, or real filesystem), so a green run
-# here is a real signal. Release packaging lives in release.yml (tag-triggered).
 on:
   push:
     branches: ['**']
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
-  build-test:
+  dotnet:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
         with:
           global-json-file: global.json
 
+      - name: Validate publication boundaries
+        run: python3 scripts/check-release-readiness.py
+
+      - name: Restore with NuGet audit
+        run: dotnet restore FreeAgent.slnx --nologo
+
       - name: Build
-        run: dotnet build FreeAgent.slnx -c Release --nologo
+        run: dotnet build FreeAgent.slnx -c Release --no-restore --nologo
 
       - name: Test
-        run: dotnet test FreeAgent.slnx -c Release --no-build --nologo
+        run: dotnet test FreeAgent.slnx -c Release --no-build --no-restore --nologo
+
+      - name: Confirm no vulnerable NuGet packages
+        run: dotnet list FreeAgent.slnx package --vulnerable --include-transitive --no-restore
+
+  tui:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients/tui
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Test
+        run: bun test
+
+      - name: Typecheck
+        run: bun run typecheck

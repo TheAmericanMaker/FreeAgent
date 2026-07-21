@@ -5,12 +5,11 @@ where the kernel can grow. Items are grouped by rough horizon, not by priority w
 a horizon. Several are seeded from the [OpenMonoAgent.ai](https://github.com/StartupHakk/OpenMonoAgent.ai)
 feature set (FreeAgent's lineage) and translated into FreeAgent's kernel terms.
 
-The kernel was built to anticipate most of this. The tool pipeline has labelled no-op
-*seams* (`cache-lookup`, `pre-hook`, `post-hook`, `artifact-store`, `cache-write`,
-`invalidate`) and the permission engine already models capabilities
-(`NetworkEgressCap`, `VcsMutationCap`, `AgentSpawnCap`, `MemoryCap`) that no tool
-exercises yet. So many items below are "fill a seam / add an adapter," not "change
-the core."
+The kernel was built to anticipate most of this. The tool pipeline's labelled seams
+(`cache-lookup`, `pre-hook`, `post-hook`, `artifact-store`, `cache-write`, `invalidate`)
+now have real implementations, and the permission engine models capabilities independently
+from their adapters. Many items below therefore remain "extend a seam / add an adapter,"
+not "change the core."
 
 ## Near-term — wire up what the kernel already models
 
@@ -190,16 +189,15 @@ Phasing (the kernel is *already* effectively headless — `SessionRuntime` + `IE
   `CommandDefinition` records (id, label, description, shortcut, category) and a subsequence
   fuzzy matcher (`FuzzyScore`) so a tighter cluster of query characters scores ahead of a wider
   spread. `HostCommands.BuildDefaultRegistry` registers every existing slash command — single
-  source of truth for both the new `/commands [query]` REPL command and the future TUI palette
-  (a frontend just binds `ctrl+p` to the same registry). The visual palette UI itself ships with
-  the TUI client (still out of autonomous scope).
+  source of truth for the `/commands [query]` REPL command and host command metadata. The shipped
+  TUI has its own client-side slash-command parser over the protocol surface.
 - [x] **Status line repositioning** — `Host/StatusBar.cs` adds an opt-in bottom status bar to the
   existing console host (set `FREE_STATUS_BAR=1`). Pure ANSI: `[1;Hr` carves out a fixed
   scroll region, `[s…[u` saves/restores the cursor around the repaint. Renders
   `provider/model | session | msgs: N | iter: N [| PLAN] [| tags] | cwd: …` and repaints after
   every turn. No-ops when stdout is redirected. Disposing restores the scroll region. The proper
-  TUI version with rule lines lands with the Bun/opentui frontend; this is the stopgap inside the
-  existing console renderer.
+  Bun/opentui frontend now supplies its own full-screen status presentation; this remains the
+  opt-in equivalent for the scrolling console renderer.
 - [x] **Local model runner (server lifecycle)** — `ModelServerLauncher` spawns `llama-server`
   (or any OpenAI-compat binary via `--bin <path>`), records the pid in
   `$XDG_CACHE_HOME/freeagent/model-server.pid`, drains its stdout/stderr to a rolling log, and
