@@ -216,10 +216,10 @@ only, *not* persisted): `PlanMode`, `SessionApprovals` (granted capability types
   `/commands` remains complete. Protocol clients maintain their own client-side command handling.
 
 ## Reference docs
-
+## Reference docs
 - `README.md`, `docs/architecture.md`, `docs/usage.md` — overview, deep tour, CLI + server usage.
-- `docs/codecarto/reimplementation-spec.md` — the **canonical behavioral contract** the kernel
-  implements; code comments cite its section names ("contracts §…").
+- `docs/architecture.md` — the authoritative architecture tour; code comments
+  reference architecture sections by name.
 - `docs/decisions/` — ADRs (kernel-first, Linux-native-first, extension-first capabilities,
   **headless-core + protocol with pluggable frontends** — ADR 0005).
 - `ROADMAP.md` — what's done and what remains.

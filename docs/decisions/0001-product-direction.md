@@ -2,6 +2,7 @@
 
 Status: Accepted
 
-FreeAgent is a full product rework, not only a kernel library and not a source-level port of OpenMonoAgent.ai.
-
-The CodeCartographer audit outputs are used as behavioral and architectural guidance. Legacy source structure is not a contract. Known hazards from the audit should be fixed or left behind rather than cloned.
+FreeAgent is an independent, kernel-first agent platform. It takes inspiration
+from the broader open-source AI coding agent community but shares no source
+code with any prior project. The kernel-first architecture, permission model,
+tool pipeline, and provider abstraction are original implementations.

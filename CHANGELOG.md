@@ -19,7 +19,7 @@ sessions crash-safely. Everything listed below is planned for 0.1.0.
 
 ### Security and publication readiness
 
-- Licensed under `AGPL-3.0-only`, with provenance, contribution, conduct, and private security-
+- Licensed under `Apache-2.0`, with acknowledgments, contribution, conduct, and private security-
   reporting documentation included in the source and package.
 - Pinned `Microsoft.OpenApi` to 2.7.5 to resolve GHSA-v5pm-xwqc-g5wc without disabling NuGet audit.
 - CI and release gates now cover the .NET solution, the locked Bun TUI, release metadata, package

@@ -3,9 +3,9 @@
 A tour of how the implemented kernel actually works — the contracts, the data that
 flows between them, and the invariants each one guarantees. For the product-level
 overview and how to run it, start with the [README](../README.md); for the original
-behavioral specification the kernel implements, see
-[`codecarto/reimplementation-spec.md`](codecarto/reimplementation-spec.md); for the
-phasing decision that made the kernel headless and added the protocol server, see
+behavioral specification the kernel implements, see this document's section
+headings; for the phasing decision that made the kernel headless and added the
+protocol server, see
 [ADR 0005](decisions/0005-headless-core-protocol.md).
 
 ## The shape of the system

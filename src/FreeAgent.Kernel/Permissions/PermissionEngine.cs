@@ -13,7 +13,7 @@ namespace FreeAgent.Kernel;
 ///   <item>Per-capability coverage: allowed type, allow rule, or auto-allow.</item>
 ///   <item>Any uncovered capability — deny (a UX layer would prompt here).</item>
 /// </list>
-/// Mirrors contracts §"Permission and Authorization Model".
+/// Mirrors the "Permission and Authorization Model" architecture section.
 /// </summary>
 public sealed class PermissionEngine : IPermissionEngine
 {

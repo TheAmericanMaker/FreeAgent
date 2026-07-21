@@ -2,7 +2,7 @@ namespace FreeAgent.Kernel;
 
 /// <summary>
 /// A fine-grained authorization unit that a tool requires before it may act. The permission
-/// engine decides each capability independently. Mirrors contracts §"Permission and
+/// engine decides each capability independently. Mirrors the "Permission and
 /// Authorization Model" → Capability subtypes.
 /// </summary>
 public abstract record Capability

@@ -17,7 +17,7 @@ REQUIRED_FILES = (
     "CONTRIBUTING.md",
     "CODE_OF_CONDUCT.md",
 )
-EXPECTED_LICENSE = "AGPL-3.0-only"
+EXPECTED_LICENSE = "Apache-2.0"
 PATCHED_OPENAPI_VERSION = "2.7.5"
 SEMVER_TAG = re.compile(
     r"^v(?P<version>(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*))$"
@@ -76,10 +76,10 @@ def main() -> int:
             failures.append(f"missing required publication file: {relative}")
 
     required_publication_content = {
-        "LICENSE": ("GNU AFFERO GENERAL PUBLIC LICENSE", "END OF TERMS AND CONDITIONS"),
-        "NOTICE": ("StartupHakk/OpenMonoAgent.ai", "AGPL-3.0"),
+        "LICENSE": ("Apache License", "Version 2.0"),
+        "NOTICE": ("Apache License", "open-source AI coding agent community"),
         "SECURITY.md": ("james.sesler@pm.me", "Report a vulnerability"),
-        "CONTRIBUTING.md": ("AGPL-3.0-only", "SECURITY.md"),
+        "CONTRIBUTING.md": ("Apache-2.0", "SECURITY.md"),
         "CODE_OF_CONDUCT.md": ("Contributor Covenant", "james.sesler@pm.me"),
     }
     for relative, tokens in required_publication_content.items():
