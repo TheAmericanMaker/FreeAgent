@@ -66,6 +66,12 @@ public static class SessionEndpoints
             ctx.Response.Headers.CacheControl = "no-cache";
             ctx.Response.Headers["X-Accel-Buffering"] = "no"; // disable proxy buffering
 
+            // The IEventSink callbacks are synchronous (void OnText, etc.) so HttpSseEventSink
+            // writes to the response body synchronously. Allow it on this streaming response.
+            var httpCtxFeature = ctx.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpBodyControlFeature>();
+            if (httpCtxFeature is not null)
+                httpCtxFeature.AllowSynchronousIO = true;
+
             var streamingSink = new HttpSseEventSink(ctx.Response);
             entry.Runtime.SwapEventSink(streamingSink); // route the runtime's events into this turn's SSE stream
 
