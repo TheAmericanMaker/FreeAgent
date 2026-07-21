@@ -68,7 +68,9 @@ export function App({ baseUrl, apiKey, serverCmd }: AppProps) {
 
   const quit = useCallback(() => {
     handleRef.current?.stop();
-    process.exit(0);
+    const cleanQuit = (globalThis as any).__freeagentQuit;
+    if (typeof cleanQuit === 'function') cleanQuit();
+    else process.exit(0);
   }, []);
 
   if (phase.t === 'connecting') return <Connecting status={phase.status} />;

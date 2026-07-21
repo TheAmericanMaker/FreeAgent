@@ -16,4 +16,12 @@ const apiKey = process.env.FREEAGENT_API_KEY;
 const serverCmd = process.env.FREEAGENT_SERVER_CMD;
 
 const renderer = await createCliRenderer({ exitOnCtrlC: false });
-createRoot(renderer).render(<App baseUrl={baseUrl} apiKey={apiKey} serverCmd={serverCmd} />);
+const root = createRoot(renderer).render(<App baseUrl={baseUrl} apiKey={apiKey} serverCmd={serverCmd} />);
+
+// Expose a clean-quit function that tears down the renderer before exiting.
+// process.exit(0) alone leaves the terminal in raw mode — calling destroy()
+// first restores the terminal to its normal state.
+(globalThis as any).__freeagentQuit = () => {
+  try { renderer.destroy(); } catch { /* best-effort */ }
+  process.exit(0);
+};
