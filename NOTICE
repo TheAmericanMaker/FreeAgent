@@ -15,9 +15,8 @@ limitations under the License.
 
 Acknowledgments
 ----------------
-FreeAgent was inspired by the open-source AI coding agent community, including
-projects such as OpenMonoAgent.ai, Odysseus, OpenCode, Pi Mono, Ollama, and
-others. The features common to these tools — local model serving, tool execution,
+FreeAgent was inspired by the open-source AI coding agent community.
+The features common to these tools — local model serving, tool execution,
 permission models, streaming chat, MCP/LSP integration — reflect widely shared
 patterns in the ecosystem rather than any single project's unique contribution.
 FreeAgent is an independent implementation that contributes its own kernel,
