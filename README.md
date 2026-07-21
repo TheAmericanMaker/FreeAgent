@@ -67,16 +67,29 @@ The largest is OpenAIProvider.cs at 307 lines …
 
 ## Install
 
-FreeAgent ships two front ends — pick whichever fits:
+### Quick install (one line)
 
-- **The app (full-screen TUI)** — an opencode-style terminal UI with **in-app setup** (pick a
-  provider, paste a key, choose a model — no terminal config), streaming chat with Markdown and
-  live tool activity, a `/command` palette, and a settings screen for permissions & trust. Best for
-  most users.
-- **The CLI tool** — the headless `freeagent` REPL, configured via a terminal wizard / env vars.
-  Best for scripting and power users.
+```bash
+curl -fsSL https://raw.githubusercontent.com/TheAmericanMaker/FreeAgent/main/scripts/get.sh | bash
+```
 
-### The app (TUI)
+This detects your OS, installs the .NET 10 SDK if needed, builds and installs the
+`freeagent` global tool, then runs the interactive setup wizard to configure a provider.
+Works on Fedora, Ubuntu/Debian, macOS, and any Linux distro with `curl`.
+
+After install, from any project directory:
+
+```bash
+freeagent        # start a session
+```
+
+### Full-screen TUI
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/TheAmericanMaker/FreeAgent/main/scripts/get.sh | bash -s -- --tui
+```
+
+Or from a clone:
 
 ```bash
 git clone https://github.com/TheAmericanMaker/FreeAgent.git
@@ -91,10 +104,7 @@ SDK at run time. (Publishing needs the .NET 10 SDK once; pass `--skip-publish` t
 dev server instead.) On first launch the app walks you through provider setup inside the UI. The
 TUI lives in [`clients/tui/`](clients/tui/).
 
-### The CLI tool
-
-Requires the **.NET 10 SDK** (the repo pins `10.0.100` via `global.json` with
-`rollForward: latestMinor`). The interactive installer takes care of everything else:
+### CLI tool from source
 
 ```bash
 git clone https://github.com/TheAmericanMaker/FreeAgent.git
