@@ -15,5 +15,5 @@ const baseUrl = process.env.FREEAGENT_BASE_URL ?? 'http://localhost:5000';
 const apiKey = process.env.FREEAGENT_API_KEY;
 const serverCmd = process.env.FREEAGENT_SERVER_CMD;
 
-const renderer = await createCliRenderer({ exitOnCtrlC: true });
+const renderer = await createCliRenderer({ exitOnCtrlC: false });
 createRoot(renderer).render(<App baseUrl={baseUrl} apiKey={apiKey} serverCmd={serverCmd} />);

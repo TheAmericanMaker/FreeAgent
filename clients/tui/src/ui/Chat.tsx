@@ -204,6 +204,12 @@ export function Chat({ client, config, workingDir: chosenDir, onOpenSettings, on
     if (key.name === 'escape' && busy) {
       abortRef.current?.abort();
       setStatusLine('Cancelling…');
+    } else if (key.ctrl && key.name === 'c') {
+      // Ctrl+C quits the app. Use Escape to cancel a running turn.
+      // (Terminal copy is Ctrl+Shift+C — the terminal handles that before we see it.)
+      process.exit(0);
+    } else if (key.ctrl && key.name === 'q') {
+      process.exit(0);
     } else if (key.ctrl && key.name === 's') {
       onOpenSettings();
     } else if (key.name === 'pageup' || (key.ctrl && key.name === 'u')) {
@@ -253,7 +259,7 @@ function EmptyState() {
     <box style={{ flexDirection: 'column', marginTop: 1 }}>
       <text style={{ fg: theme.accent, attributes: 1 }} content="Welcome to FreeAgent" />
       <text style={{ fg: theme.textDim }} content="Ask anything — the agent can read, search, edit files, and run commands in the working directory." />
-      <text style={{ fg: theme.textFaint, marginTop: 1 }} content="/help for commands · Ctrl+S settings · Esc cancels a turn · Ctrl+C quits" />
+      <text style={{ fg: theme.textFaint, marginTop: 1 }} content="/help for commands · Ctrl+S settings · Esc cancels a turn · Ctrl+Q quits" />
     </box>
   );
 }
@@ -275,7 +281,7 @@ function StatusBar({ statusLine, tokens, busy }: { statusLine: string; tokens: {
     <box style={{ flexDirection: 'row', paddingLeft: 1, paddingRight: 1, backgroundColor: theme.panelAlt }}>
       <text style={{ fg: busy ? theme.warn : theme.textDim }} content={statusLine} />
       <box style={{ flexGrow: 1 }} />
-      <text style={{ fg: theme.textFaint }} content={`${tok}  /help · Ctrl+S · Ctrl+C `} />
+      <text style={{ fg: theme.textFaint }} content={`${tok}  /help · Ctrl+S · Ctrl+Q `} />
     </box>
   );
 }
