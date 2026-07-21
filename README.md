@@ -12,7 +12,7 @@ the turn loop, the tool-execution pipeline, the permission engine, and crash-saf
 session persistence. The CLI (`FreeAgent.Host`) and server (`FreeAgent.Server`) are
 thin shells over it; `clients/tui` consumes the server protocol.
 
-Licensed under [`AGPL-3.0-only`](LICENSE). See [NOTICE](NOTICE) for provenance.
+Licensed under [Apache 2.0](LICENSE). See [NOTICE](NOTICE) for acknowledgments.
 
 ```
 You ▸ list the .cs files under src and tell me which is largest
@@ -570,8 +570,7 @@ The reasoning behind the shape of the project lives in `docs/decisions/`:
 - [0004 — Extension-first capabilities](docs/decisions/0004-extension-first-capabilities.md)
 - [0005 — Headless core + protocol, with pluggable frontends](docs/decisions/0005-headless-core-protocol.md)
 
-The full behavioral contract the kernel implements is in
-`docs/codecarto/reimplementation-spec.md`.
+The full architecture tour is in [`docs/architecture.md`](docs/architecture.md).
 
 ## Roadmap & non-goals
 
@@ -613,9 +612,8 @@ Please report suspected vulnerabilities privately as described in [SECURITY.md](
 FreeAgent executes user-authorized tools, hooks, and protocol integrations, so reports should
 identify behavior outside the documented permission or trust boundary.
 
-## License and provenance
+## License and acknowledgments
 
-FreeAgent is licensed under the [GNU Affero General Public License v3.0 only](LICENSE)
-(`AGPL-3.0-only`). See [NOTICE](NOTICE) for provenance and attribution, including the
-OpenMonoAgent.ai behavioral and architectural audit lineage. Contributions are welcome under the
-same terms; see [CONTRIBUTING.md](CONTRIBUTING.md).
+FreeAgent is licensed under the [Apache License, Version 2.0](LICENSE). See
+[NOTICE](NOTICE) for acknowledgments. Contributions are welcome under the same
+terms; see [CONTRIBUTING.md](CONTRIBUTING.md).

@@ -3,7 +3,7 @@ namespace FreeAgent.Kernel;
 /// <summary>
 /// The documented tool-result taxonomy. Every class except <see cref="Success"/>
 /// is an error (<see cref="ToolResult.IsError"/> is true).
-/// Mirrors contracts §"Tool result return shapes".
+/// Mirrors the "Tool result return shapes" architecture section.
 /// </summary>
 public enum ToolResultKind
 {
@@ -58,7 +58,7 @@ public sealed record ToolResult(ToolResultKind Kind, string Content, string? Ret
 
     /// <summary>
     /// Plan-mode guard rejection for the non-read-only <paramref name="toolName"/>. The
-    /// mandated wording lives here so it has a single source of truth (contracts §"/plan").
+    /// mandated wording lives here so it has a single source of truth (architecture §"/plan").
     /// </summary>
     public static ToolResult PlanModeBlocked(string toolName) =>
         new(ToolResultKind.PlanModeBlocked,

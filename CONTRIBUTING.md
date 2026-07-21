@@ -41,6 +41,6 @@ python3 scripts/check-release-readiness.py
 
 ## License
 
-By submitting a contribution, you agree that it may be distributed under the repository's [AGPL-3.0-only license](LICENSE). You represent that you have the right to submit the contribution under those terms.
+By submitting a contribution, you agree that it may be distributed under the repository's [Apache-2.0 license](LICENSE). You represent that you have the right to submit the contribution under those terms.
 
 All contributors must follow the [Code of Conduct](CODE_OF_CONDUCT.md).

@@ -8,7 +8,7 @@ namespace FreeAgent.Kernel;
 /// kernel-level implementation yet (sanity-check, cache,
 /// hooks, artifact-store, invalidate) are explicit no-op seams: they record their place in
 /// <see cref="StepLog"/> so the order is observable and the extension point is obvious.
-/// See contracts §"Tool Execution Pipeline".
+/// See the "Tool Execution Pipeline" architecture section.
 /// </summary>
 public sealed class ToolPipeline
 {

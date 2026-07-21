@@ -4,8 +4,8 @@ namespace FreeAgent.Kernel;
 /// Capability and limits metadata for a specific model identifier. Optional — providers don't have
 /// to publish a model record, but when they do the runtime can size budgets, gate features (vision,
 /// tool use, thinking) and pick sensible defaults without hard-coding model strings throughout the
-/// codebase. Mirrors the shape OpenMonoAgent and friends settled on after going through the
-/// "hardcoded gpt-4o-mini default" trap.
+/// codebase. Mirrors the shape the open-source agent community settled on after
+/// going through the "hardcoded gpt-4o-mini default" trap.
 /// </summary>
 public sealed record Model(
     /// <summary>Provider-issued model identifier (e.g. <c>claude-3-7-sonnet-latest</c>).</summary>

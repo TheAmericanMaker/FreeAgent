@@ -2,8 +2,8 @@
 
 Backlog for FreeAgent. Nothing here is committed or scheduled — it's the shape of
 where the kernel can grow. Items are grouped by rough horizon, not by priority within
-a horizon. Several are seeded from the [OpenMonoAgent.ai](https://github.com/StartupHakk/OpenMonoAgent.ai)
-feature set (FreeAgent's lineage) and translated into FreeAgent's kernel terms.
+a horizon. Several reflect patterns shared across the open-source AI coding agent
+community and translated into FreeAgent's kernel terms.
 
 The kernel was built to anticipate most of this. The tool pipeline's labelled seams
 (`cache-lookup`, `pre-hook`, `post-hook`, `artifact-store`, `cache-write`, `invalidate`)

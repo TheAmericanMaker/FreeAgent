@@ -16,7 +16,7 @@ public readonly record struct SchemaValidationResult(bool IsValid, string? Error
 /// root object <c>type</c>, <c>properties</c>, <c>required</c>, primitive property <c>type</c>s
 /// (string, number, integer, boolean, object, array), and <c>additionalProperties: false</c> at
 /// the root. Unknown/unsupported keywords are ignored; a malformed schema yields an invalid result
-/// rather than throwing. See contracts §"Tool Execution Pipeline" step 2.
+/// rather than throwing. See the "Tool Execution Pipeline" architecture section, step 2.
 /// </summary>
 public static class ToolInputSchemaValidator
 {

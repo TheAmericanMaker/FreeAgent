@@ -67,7 +67,7 @@ jobs:
           set -euo pipefail
           nupkg="dist/FreeAgent.${VERSION}.nupkg"
           test -f "$nupkg"
-          unzip -p "$nupkg" FreeAgent.nuspec | grep -F '<license type="expression">AGPL-3.0-only</license>'
+          unzip -p "$nupkg" FreeAgent.nuspec | grep -F '<license type="expression">Apache-2.0</license>'
           unzip -l "$nupkg" | grep -F 'README.md'
           unzip -l "$nupkg" | grep -F 'LICENSE'
           unzip -l "$nupkg" | grep -F 'NOTICE'
