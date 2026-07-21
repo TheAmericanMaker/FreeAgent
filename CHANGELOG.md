@@ -6,6 +6,15 @@ All notable changes to FreeAgent are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-07-21
+
+### Fixed
+
+- **Quitting the TUI no longer corrupts the terminal** — all quit paths (Ctrl+Q, /quit,
+  error-screen quit) now call the renderer's `destroy()` method before exiting, which restores
+  raw mode, alternate screen, and cursor state. Previously `process.exit(0)` left the terminal
+  in raw mode, causing streaming garbage characters. Fixes #32.
+
 ## [0.1.2] - 2026-07-21
 
 Bug fixes for the TUI and protocol server.
