@@ -10,7 +10,7 @@
     <ToolCommandName>freeagent</ToolCommandName>
     <!-- NuGet IDs are global; if "FreeAgent" is taken on nuget.org, change this before publishing. -->
     <PackageId>FreeAgent</PackageId>
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
     <Authors>James Sesler</Authors>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <Description>FreeAgent — a Linux-native, modular agent kernel and interactive CLI for tool-using LLMs over any OpenAI-compatible endpoint.</Description>
