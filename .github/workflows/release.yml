@@ -7,10 +7,12 @@ on:
 
 permissions:
   contents: write   # create the GitHub Release and upload assets
+  id-token: write   # NuGet Trusted Publishing (OIDC token exchange)
 
 jobs:
   release:
     runs-on: ubuntu-latest
+    environment: nuget
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
@@ -96,16 +98,9 @@ jobs:
           cd dist
           sha256sum ./*.nupkg ./freeagent-* > SHA256SUMS
 
-      - name: Publish to NuGet (if a key is configured)
-        env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+      - name: Publish to NuGet (Trusted Publishing)
         run: |
-          if [ -n "${NUGET_API_KEY:-}" ]; then
-            dotnet nuget push dist/*.nupkg --api-key "$NUGET_API_KEY" \
-              --source https://api.nuget.org/v3/index.json --skip-duplicate
-          else
-            echo "NUGET_API_KEY not set; skipping NuGet publish (binaries + nupkg still attached to the release)."
-          fi
+          dotnet nuget push dist/*.nupkg --source https://api.nuget.org/v3/index.json --skip-duplicate
 
       - name: Create GitHub Release and attach assets
         uses: softprops/action-gh-release@fe965f7af51af5f2602596916f38a38df2e33de0 # v3.0.2
