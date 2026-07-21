@@ -6,6 +6,16 @@ All notable changes to FreeAgent are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-07-21
+
+### Added
+
+- **TUI setup shows live model list** — when configuring Ollama in the TUI setup wizard, the model
+  step now fetches available models from the configured host (local or Cloud) and displays a
+  pickable list. Users can still type a custom model name. New server endpoint `GET /models/live`.
+- **Roadmap: TUI polish section** — added in-app clipboard copy, TUI onboarding, and VS Code
+  extension to the roadmap.
+
 ## [0.1.3] - 2026-07-21
 
 ### Fixed
