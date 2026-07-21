@@ -77,6 +77,37 @@ else
   ok "Published to $dist_server"
 fi
 
+# Write a marker file so freeagent-ui-global can find the TUI source.
+mkdir -p "$HOME/.config/freeagent"
+echo "$tui_dir" > "$HOME/.config/freeagent/tui-path"
+ok "TUI path registered"
+
+# Install the global launcher so 'freeagent-ui' works from any directory.
+local_bin="$HOME/.local/bin"
+mkdir -p "$local_bin"
+cp "$repo_root/scripts/freeagent-ui-global" "$local_bin/freeagent-ui"
+chmod +x "$local_bin/freeagent-ui"
+
+# Ensure ~/.local/bin is on PATH.
+if [[ ":$PATH:" != *":$local_bin:"* ]]; then
+  profile=""
+  case "$(basename "${SHELL:-}")" in
+    zsh)  profile="$HOME/.zshrc" ;;
+    bash) profile="$HOME/.bashrc" ;;
+    fish) profile="$HOME/.config/fish/config.fish" ;;
+    *)    profile="$HOME/.profile" ;;
+  esac
+  if [[ -n "$profile" ]] && ! grep -q "$local_bin" "$profile" 2>/dev/null; then
+    if [[ "$(basename "${SHELL:-}")" == "fish" ]]; then
+      printf '\n# Added by FreeAgent installer\nfish_add_path %s\n' "$local_bin" >> "$profile"
+    else
+      printf '\n# Added by FreeAgent installer\nexport PATH="$PATH:%s"\n' "$local_bin" >> "$profile"
+    fi
+    ok "Added $local_bin to PATH in $profile"
+  fi
+fi
+ok "Installed freeagent-ui to $local_bin/freeagent-ui"
+
 echo
 say 'Done.'
-printf '  Run the app with:\n    scripts/freeagent-ui\n  or:\n    cd clients/tui && bun run tui\n'
+printf '  Run the app from any directory:\n    %sfreeagent-ui%s\n  or from the repo:\n    scripts/freeagent-ui\n  or:\n    cd clients/tui && bun run tui\n' "$c_cyan" "$c_reset" 2>/dev/null || printf '  Run the app from any directory:\n    freeagent-ui\n  or from the repo:\n    scripts/freeagent-ui\n'

@@ -239,7 +239,7 @@ echo "  Start a session:  ${c_cyan}cd ~/your-project && freeagent${c_reset}"
 echo "  Get help:         ${c_cyan}freeagent --help${c_reset}"
 echo "  Configure:        ${c_cyan}freeagent setup${c_reset}"
 if [[ "$INSTALL_TUI" == "1" ]]; then
-  echo "  Launch the TUI:   ${c_cyan}$repo_root/scripts/freeagent-ui${c_reset}"
+  echo "  Launch the TUI:   ${c_cyan}freeagent-ui${c_reset} (from any directory)"
 fi
 echo
 echo "  Docs: ${c_cyan}https://github.com/TheAmericanMaker/FreeAgent${c_reset}"
