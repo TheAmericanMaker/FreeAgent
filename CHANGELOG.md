@@ -6,6 +6,23 @@ All notable changes to FreeAgent are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-07-21
+
+Bug fixes for the TUI and protocol server.
+
+### Fixed
+
+- **SSE streaming error in TUI** — the protocol server's SSE endpoint was rejecting synchronous
+  writes with "Synchronous operations are disallowed." Enabled `AllowSynchronousIO` on the SSE
+  turn endpoint so the `IEventSink` callbacks can write to the response stream.
+- **Ctrl+C no longer crashes the TUI** — disabled `exitOnCtrlC` in the opentui renderer so
+  Ctrl+C is ignored instead of killing the process without cleanup. Quit with Ctrl+Q or /quit.
+
+### Known issues
+
+- Terminal copy (Ctrl+C / Ctrl+Shift+C) does not work inside the TUI — see #31.
+- Quitting the TUI may corrupt terminal state on some terminals — see #32.
+
 ## [0.1.1] - 2026-07-21
 
 Post-release polish and NuGet Trusted Publishing.
