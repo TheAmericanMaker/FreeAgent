@@ -205,7 +205,9 @@ export function Chat({ client, config, workingDir: chosenDir, onOpenSettings, on
       abortRef.current?.abort();
       setStatusLine('Cancelling…');
     } else if (key.ctrl && key.name === 'q') {
-      process.exit(0);
+      const cleanQuit = (globalThis as any).__freeagentQuit;
+      if (typeof cleanQuit === 'function') cleanQuit();
+      else process.exit(0);
     } else if (key.ctrl && key.name === 's') {
       onOpenSettings();
     } else if (key.name === 'pageup' || (key.ctrl && key.name === 'u')) {
