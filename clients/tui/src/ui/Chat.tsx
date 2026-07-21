@@ -5,7 +5,7 @@
 // per-turn AbortController, and handles the /command palette + session lifecycle.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useKeyboard } from '@opentui/react';
+import { useKeyboard, useRenderer } from '@opentui/react';
 import type { ScrollBoxRenderable } from '@opentui/core';
 import { theme } from '../theme';
 import { SafeMarkdown, TextInput } from './controls';
@@ -42,6 +42,7 @@ export function Chat({ client, config, workingDir: chosenDir, onOpenSettings, on
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<ScrollBoxRenderable>(null);
   const nextId = useRef(1);
+  const renderer = useRenderer();
   const provider = config.activeProvider;
   const [model, setModel] = useState<string>(config.providers[provider]?.model ?? '(default)');
 
@@ -204,6 +205,15 @@ export function Chat({ client, config, workingDir: chosenDir, onOpenSettings, on
     if (key.name === 'escape' && busy) {
       abortRef.current?.abort();
       setStatusLine('Cancelling…');
+    } else if (key.ctrl && key.name === 'y') {
+      // Copy the last assistant response to clipboard via OSC 52.
+      const lastAssistant = [...blocks].reverse().find((b) => b.kind === 'assistant');
+      if (lastAssistant?.text) {
+        const ok = renderer.copyToClipboardOSC52(lastAssistant.text);
+        setStatusLine(ok ? 'Copied last response to clipboard' : 'Copy failed (OSC 52 not supported)');
+      } else {
+        setStatusLine('No assistant response to copy');
+      }
     } else if (key.ctrl && key.name === 'q') {
       const cleanQuit = (globalThis as any).__freeagentQuit;
       if (typeof cleanQuit === 'function') cleanQuit();
@@ -257,7 +267,7 @@ function EmptyState() {
     <box style={{ flexDirection: 'column', marginTop: 1 }}>
       <text style={{ fg: theme.accent, attributes: 1 }} content="Welcome to FreeAgent" />
       <text style={{ fg: theme.textDim }} content="Ask anything — the agent can read, search, edit files, and run commands in the working directory." />
-      <text style={{ fg: theme.textFaint, marginTop: 1 }} content="/help for commands · Ctrl+S settings · Esc cancels a turn · Ctrl+Q quits" />
+      <text style={{ fg: theme.textFaint, marginTop: 1 }} content="/help for commands · Ctrl+S settings · Ctrl+Y copy · Esc cancels · Ctrl+Q quits" />
     </box>
   );
 }
@@ -279,7 +289,7 @@ function StatusBar({ statusLine, tokens, busy }: { statusLine: string; tokens: {
     <box style={{ flexDirection: 'row', paddingLeft: 1, paddingRight: 1, backgroundColor: theme.panelAlt }}>
       <text style={{ fg: busy ? theme.warn : theme.textDim }} content={statusLine} />
       <box style={{ flexGrow: 1 }} />
-      <text style={{ fg: theme.textFaint }} content={`${tok}  /help · Ctrl+S · Ctrl+Q `} />
+      <text style={{ fg: theme.textFaint }} content={`${tok}  /help · Ctrl+S · Ctrl+Y · Ctrl+Q `} />
     </box>
   );
 }
