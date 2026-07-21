@@ -6,6 +6,20 @@ All notable changes to FreeAgent are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-07-21
+
+### Added
+
+- **Ctrl+Y copies last response to clipboard** — uses OSC 52 to copy the last assistant
+  response to the system clipboard. Works on Konsole, iTerm2, Alacritty, Windows
+  Terminal, and other terminals that support OSC 52. Fixes #31.
+
+### Changed
+
+- **README rewritten for users** — new intro, quick start, "what can it do?" section,
+  TUI keybindings table, and Ollama setup guide. Deep technical sections kept below
+  for developers. Collapsible from-source install section.
+
 ## [0.1.5] - 2026-07-21
 
 ### Added
