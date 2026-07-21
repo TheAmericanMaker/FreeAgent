@@ -204,10 +204,6 @@ export function Chat({ client, config, workingDir: chosenDir, onOpenSettings, on
     if (key.name === 'escape' && busy) {
       abortRef.current?.abort();
       setStatusLine('Cancelling…');
-    } else if (key.ctrl && key.name === 'c') {
-      // Ctrl+C quits the app. Use Escape to cancel a running turn.
-      // (Terminal copy is Ctrl+Shift+C — the terminal handles that before we see it.)
-      process.exit(0);
     } else if (key.ctrl && key.name === 'q') {
       process.exit(0);
     } else if (key.ctrl && key.name === 's') {
