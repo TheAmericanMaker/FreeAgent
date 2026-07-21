@@ -6,6 +6,20 @@ All notable changes to FreeAgent are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-07-21
+
+### Added
+
+- **Global `freeagent-ui` command** — after running the installer with `--tui`, the TUI is
+  available as `freeagent-ui` from any directory (installed to `~/.local/bin`). The launcher
+  finds the TUI source via `~/.config/freeagent/tui-path` and launches it with Bun.
+
+### Fixed
+
+- **PATH now writes to `~/.bashrc`** — all installers already used `~/.bashrc` (not
+  `~/.bash_profile`), so new terminal windows on Fedora/KDE pick up `freeagent` and
+  `freeagent-ui` automatically without needing to `source` a profile.
+
 ## [0.1.4] - 2026-07-21
 
 ### Added
