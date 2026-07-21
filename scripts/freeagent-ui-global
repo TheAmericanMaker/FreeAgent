@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# Launch the FreeAgent TUI from any directory.
+#
+# After running scripts/install-tui.sh (or get.sh --tui), this script is
+# installed to ~/.local/bin/freeagent-ui so it's available on PATH globally.
+#
+# It finds the TUI source (either from the repo it was installed from, or
+# from a known location) and launches it with Bun.
+
+set -euo pipefail
+
+# The TUI source directory — stored by install-tui.sh when it runs.
+TUI_DIR="${FREEAGENT_TUI_DIR:-}"
+
+# If not set via env, try the default install location.
+if [[ -z "$TUI_DIR" ]]; then
+  # Check for a marker file that install-tui.sh writes.
+  marker="$HOME/.config/freeagent/tui-path"
+  if [[ -f "$marker" ]]; then
+    TUI_DIR="$(cat "$marker")"
+  fi
+fi
+
+if [[ -z "$TUI_DIR" || ! -d "$TUI_DIR" ]]; then
+  echo "FreeAgent TUI not found. Run 'scripts/install-tui.sh' or the installer with --tui first." >&2
+  exit 1
+fi
+
+# Find Bun.
+if command -v bun >/dev/null 2>&1; then
+  bun_bin="$(command -v bun)"
+elif [[ -x "$HOME/.bun/bin/bun" ]]; then
+  bun_bin="$HOME/.bun/bin/bun"
+else
+  echo "Bun not found. Run 'scripts/install-tui.sh' first." >&2
+  exit 1
+fi
+
+cd "$TUI_DIR"
+exec "$bun_bin" run src/tui.tsx "$@"
