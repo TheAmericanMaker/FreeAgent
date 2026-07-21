@@ -1,5 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Net.Http;
+using System.Net.Http.Headers;
 
 namespace FreeAgent.Host;
 
@@ -232,6 +234,30 @@ public static class InteractiveSetup
 
         var setAsDefault = AskYesNo($"Set '{provider}' as the default provider for new shells", defaultYes: true);
 
+        // Ollama Cloud: if an API key was provided, offer to list available models.
+        if (provider is "ollama" && answers.ContainsKey("apiKey") && !string.IsNullOrWhiteSpace(answers.GetValueOrDefault("baseUrl")))
+        {
+            var listed = await TryListOllamaCloudModelsAsync(answers["baseUrl"], answers["apiKey"], cancellationToken);
+            if (listed is { Count: > 0 } models)
+            {
+                Console.WriteLine();
+                Console.WriteLine("  Available Ollama Cloud models:");
+                for (var i = 0; i < models.Count; i++)
+                    Console.WriteLine($"    {i + 1}) {models[i]}");
+                Console.WriteLine();
+                Console.Write("  Pick a model by number, or type a name [1]: ");
+                var pick = Console.ReadLine();
+                if (string.IsNullOrWhiteSpace(pick))
+                    answers["model"] = models[0];
+                else if (int.TryParse(pick.Trim(), out var n) && n >= 1 && n <= models.Count)
+                    answers["model"] = models[n - 1];
+                else
+                    answers["model"] = pick.Trim();
+                if (!string.IsNullOrWhiteSpace(answers.GetValueOrDefault("model")))
+                    Console.WriteLine($"  Using model: {answers["model"]}");
+            }
+        }
+
         var merged = MergeProviderSection(existing, provider, answers, setAsDefault);
 
         Directory.CreateDirectory(Path.GetDirectoryName(configPath)!);
@@ -290,6 +316,44 @@ public static class InteractiveSetup
             if (trimmed is "y" or "yes") return true;
             if (trimmed is "n" or "no") return false;
             Console.WriteLine("  Please answer y or n.");
+        }
+    }
+
+    /// <summary>
+    /// Fetch the list of available models from an Ollama host (local or Cloud).
+    /// Returns null on any failure so the wizard falls back to manual model entry.
+    /// </summary>
+    private static async Task<List<string>?> TryListOllamaCloudModelsAsync(
+        string baseUrl, string apiKey, CancellationToken ct)
+    {
+        try
+        {
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+            using var req = new HttpRequestMessage(HttpMethod.Get, new Uri(baseUrl.TrimEnd('/') + "/api/tags"));
+            if (!string.IsNullOrWhiteSpace(apiKey))
+                req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+            using var resp = await http.SendAsync(req, ct);
+            if (!resp.IsSuccessStatusCode) return null;
+            var json = await resp.Content.ReadAsStringAsync(ct);
+            using var doc = JsonDocument.Parse(json);
+            var models = new List<string>();
+            if (doc.RootElement.TryGetProperty("models", out var arr) && arr.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var m in arr.EnumerateArray())
+                {
+                    if (m.TryGetProperty("name", out var name) && name.ValueKind == JsonValueKind.String)
+                    {
+                        var s = name.GetString();
+                        if (!string.IsNullOrWhiteSpace(s))
+                            models.Add(s);
+                    }
+                }
+            }
+            return models.Count > 0 ? models : null;
+        }
+        catch
+        {
+            return null;
         }
     }
 }
