@@ -88,7 +88,7 @@ public static class Program
             "azure" => new AzureOpenAIProvider(
                 endpoint: baseUrl, apiKey: apiKey, deployment: model,
                 apiVersion: settings.ApiVersion ?? AzureOpenAIProvider.DefaultApiVersion),
-            "ollama" => new OllamaProvider(baseUrl, model, ollamaNumCtx, ollamaTemperature),
+            "ollama" => new OllamaProvider(baseUrl, model, ollamaNumCtx, ollamaTemperature, apiKey),
             // For Bedrock, settings.BaseUrl carries the AWS region (not an HTTP URL); the SDK
             // turns it into an endpoint via RegionEndpoint.GetBySystemName. Auth flows through
             // the default AWS credential chain.

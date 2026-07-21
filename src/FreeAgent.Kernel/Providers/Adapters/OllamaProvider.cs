@@ -1,4 +1,5 @@
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
@@ -17,16 +18,18 @@ public sealed class OllamaProvider : IProvider, IDisposable
 {
     public const string DefaultBaseUrl = "http://localhost:11434";
     public const string DefaultModel = "qwen2.5-coder";
+    public const string CloudBaseUrl = "https://ollama.com";
 
     private readonly string _model;
     private readonly int? _numCtx;
     private readonly double? _temperature;
+    private readonly string? _apiKey;
     private readonly HttpClient _httpClient;
     private readonly Uri _baseUri;
     private readonly bool _ownsClient;
     private bool _disposed;
 
-    public OllamaProvider(string baseUrl = DefaultBaseUrl, string model = DefaultModel, int? numCtx = null, double? temperature = null)
+    public OllamaProvider(string baseUrl = DefaultBaseUrl, string model = DefaultModel, int? numCtx = null, double? temperature = null, string? apiKey = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(baseUrl);
         ArgumentException.ThrowIfNullOrWhiteSpace(model);
@@ -34,12 +37,13 @@ public sealed class OllamaProvider : IProvider, IDisposable
         _model = model;
         _numCtx = numCtx;
         _temperature = temperature;
+        _apiKey = string.IsNullOrWhiteSpace(apiKey) ? null : apiKey;
         _ownsClient = true;
         _httpClient = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
         _baseUri = new Uri(baseUrl.TrimEnd('/') + "/");
     }
 
-    public OllamaProvider(HttpClient httpClient, string baseUrl, string model = DefaultModel, int? numCtx = null, double? temperature = null)
+    public OllamaProvider(HttpClient httpClient, string baseUrl, string model = DefaultModel, int? numCtx = null, double? temperature = null, string? apiKey = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(baseUrl);
         ArgumentException.ThrowIfNullOrWhiteSpace(model);
@@ -48,6 +52,7 @@ public sealed class OllamaProvider : IProvider, IDisposable
         _model = model;
         _numCtx = numCtx;
         _temperature = temperature;
+        _apiKey = string.IsNullOrWhiteSpace(apiKey) ? null : apiKey;
         _ownsClient = false;
         _baseUri = new Uri(baseUrl.TrimEnd('/') + "/");
     }
@@ -64,6 +69,8 @@ public sealed class OllamaProvider : IProvider, IDisposable
         {
             Content = httpContent
         };
+        if (_apiKey is not null)
+            httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
         using var response = await _httpClient.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
 
         if (!response.IsSuccessStatusCode)

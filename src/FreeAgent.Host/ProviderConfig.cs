@@ -54,7 +54,7 @@ public sealed class ProviderConfig
     /// <summary>Optional explicit Azure OpenAI section. <c>Model</c> here is the deployment name.</summary>
     public ProviderSettings? Azure { get; init; }
 
-    /// <summary>Optional explicit Ollama section. <c>ApiKey</c> is ignored (Ollama is unauthenticated by default).</summary>
+    /// <summary>Optional explicit Ollama section. <c>ApiKey</c> is only used for direct Ollama Cloud access; local Ollama is unauthenticated.</summary>
     public ProviderSettings? Ollama { get; init; }
 
     /// <summary>Optional explicit AWS Bedrock section. <c>BaseUrl</c> is the AWS region (e.g. "us-east-1"); <c>ApiKey</c> is ignored (auth comes from the default AWS credential chain).</summary>

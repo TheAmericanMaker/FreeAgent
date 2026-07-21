@@ -44,7 +44,7 @@ public static class InteractiveSetup
         "openai"    => "OpenAI / any OpenAI-compatible /v1/chat/completions endpoint (Groq, gateways, …)",
         "anthropic" => "Anthropic Claude (x-api-key header)",
         "azure"     => "Azure OpenAI (endpoint + deployment + api-version)",
-        "ollama"    => "Ollama (no API key needed; native /api/chat)",
+        "ollama"    => "Ollama — local or Ollama Cloud (api key optional, only needed for direct cloud access)",
         "bedrock"   => "AWS Bedrock — auth from the default AWS credential chain",
         "vertex"    => "Google Vertex AI — auth from Application Default Credentials (gcloud auth)",
         _           => provider,
@@ -78,8 +78,9 @@ public static class InteractiveSetup
         ],
         "ollama" =>
         [
-            new("baseUrl", "Host",  Default: "http://localhost:11434", Secret: false),
-            new("model",   "Model", Default: "qwen2.5-coder",          Secret: false),
+            new("baseUrl", "Host",    Default: "http://localhost:11434", Secret: false, EnvFallback: "OLLAMA_HOST"),
+            new("apiKey",  "API key", Default: null, Secret: true, Hint: "Only needed for direct Ollama Cloud access (https://ollama.com). Leave blank for local Ollama.", EnvFallback: "OLLAMA_API_KEY"),
+            new("model",   "Model",   Default: "qwen2.5-coder",          Secret: false),
         ],
         "bedrock" =>
         [
@@ -217,6 +218,8 @@ public static class InteractiveSetup
         {
             cancellationToken.ThrowIfCancellationRequested();
             var def = ResolveDefault(question, ExistingProviderValue(existing, provider, question.Slot));
+            if (!string.IsNullOrWhiteSpace(question.Hint))
+                Console.WriteLine($"  {question.Hint}");
             var label = question.Secret
                 ? $"  {question.PromptLabel} (input hidden{(def is null ? "" : "; press Enter to keep existing")}): "
                 : $"  {question.PromptLabel}{(def is null ? "" : $" [{def}]")}: ";
@@ -297,4 +300,5 @@ public sealed record SetupQuestion(
     string PromptLabel,
     string? Default = null,
     bool Secret = false,
-    string? EnvFallback = null);
+    string? EnvFallback = null,
+    string? Hint = null);
