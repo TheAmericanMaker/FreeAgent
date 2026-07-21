@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <RootNamespace>FreeAgent.Server</RootNamespace>
+    <OutputType>Exe</OutputType>
+    <UserSecretsId>freeagent-server-dev</UserSecretsId>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\FreeAgent.Kernel\FreeAgent.Kernel.csproj" />
+    <ProjectReference Include="..\FreeAgent.Host\FreeAgent.Host.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.8" />
+    <!-- Explicit security pin: 2.0.0 is affected by GHSA-v5pm-xwqc-g5wc. -->
+    <PackageReference Include="Microsoft.OpenApi" Version="2.7.5" />
+  </ItemGroup>
+</Project>

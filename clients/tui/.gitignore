@@ -1,0 +1,6 @@
+# Bun / Node
+node_modules/
+
+# Published server binary + any compiled TUI artifacts (produced by scripts/install-tui.*)
+dist/
+*.tsbuildinfo

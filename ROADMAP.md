@@ -1,0 +1,289 @@
+# Roadmap
+
+Backlog for FreeAgent. Nothing here is committed or scheduled — it's the shape of
+where the kernel can grow. Items are grouped by rough horizon, not by priority within
+a horizon. Several reflect patterns shared across the open-source AI coding agent
+community and translated into FreeAgent's kernel terms.
+
+The kernel was built to anticipate most of this. The tool pipeline's labelled seams
+(`cache-lookup`, `pre-hook`, `post-hook`, `artifact-store`, `cache-write`, `invalidate`)
+now have real implementations, and the permission engine models capabilities independently
+from their adapters. Many items below therefore remain "extend a seam / add an adapter,"
+not "change the core."
+
+## Near-term — wire up what the kernel already models
+
+Mostly small, because the design already has the hook. Generally more pressing than
+the larger ported features further down. (The first daily-driver batch is now done —
+see below.)
+
+- [x] **Interactive permission approval** — today an uncovered capability is denied with
+  no way to approve it live, so the only approval channel is hand-writing
+  `.freeagent/config.json` (and the model tends to hallucinate an approval UI that isn't
+  there). Intercept the engine's "needs approval" denial in the host and prompt
+  `[allow once / session / always→write a rule / deny]`; carry session grants in
+  `SessionState`; tighten the denial text. The kernel already returns a clean,
+  distinct denial for exactly this. **Highest-impact near-term item — it currently blocks
+  real edits.**
+- [x] **Minimal system prompt (user-editable)** — FreeAgent injects *no* system prompt today, so
+  the model is ungrounded (it narrates, and invents an approval UI that doesn't exist). Add a
+  built-in default telling the model what it is, the working directory, the tools available, and how
+  the host actually behaves (denied = denied; be concise), loaded from a **user-editable file**
+  (`~/.config/freeagent/system.md`, with an optional project-level `.freeagent/system.md` override)
+  so it can be customized. The fuller **System-prompt assembly** below (project file + git status +
+  memory) layers on top later.
+- [x] **Local-server providers** — Ollama works via `OPENAI_BASE_URL=http://localhost:11434/v1`
+  using the OpenAI-compat path, and a native `OllamaProvider` is now wired against `/api/chat`
+  (newline-delimited JSON streaming, native tool-call format, optional `num_ctx` + `temperature`
+  via `FREE_NUM_CTX` / `FREE_TEMPERATURE`). Select with `FREEPROVIDER=ollama`; default host is
+  `http://localhost:11434` (`OLLAMA_HOST` overrides). No API key required.
+- [x] **More slash commands** — `/status`, `/model`, `/help` alongside the existing `/plan`
+  (the host command dispatch is in place). Feature-specific commands (`/compact`, `/undo`,
+  `/commit`, …) arrive with their backing features below, and a `ctrl+p` command palette
+  eventually supersedes slash-commands in the TUI (see On the horizon).
+
+## Coming next — larger features
+
+- [x] **More providers** — Anthropic, Azure OpenAI, Ollama, AWS Bedrock, Google Vertex done.
+  Groq works via OpenAI-compat (`OPENAI_BASE_URL=https://api.groq.com/openai/v1`, recipe in
+  `docs/usage.md`). Bedrock uses the official `AWSSDK.BedrockRuntime` SDK; Vertex uses
+  `Google.Apis.Auth` for Application Default Credentials (env / shared creds / GCE metadata) and
+  posts to `…-aiplatform.googleapis.com/.../publishers/anthropic/models/…:streamRawPredict` with
+  the bearer token. Token source is injectable via `VertexProvider.ITokenSource` so tests don't
+  need real ADC.
+- [x] **Provider-model scaffolding** — first-class `Model` metadata record (id, wire API, context
+  window, default max-output, supports tools/vision/thinking flags); `StopReason` enum
+  (`EndTurn`/`ToolUse`/`MaxTokens`/`StopSequence`/`Refusal`/`Unknown`) carried on every
+  `StreamChunk`; per-provider mapping from the wire-specific finish/stop-reason string into
+  `StopReason` (OpenAI/Azure/Anthropic/Ollama); `ModelCatalog` keyed by `wire-api/id` for
+  registration + lookup, with built-in defaults for the major models. Per-model compat flags +
+  typed request options remain a follow-up — every provider currently accepts a single
+  `ProviderRequest` shape and that's still sufficient.
+- [x] **Context-window management** — per-turn input-token tracking in `SessionState`, configurable
+  `ContextWindow` (env `FREE_CONTEXT_TOKENS`), and pre-turn **turn-aware compaction** that drops
+  older `User → Assistant → Tool` blocks (preserving `tool_use` / `tool_result` pairings and the
+  user-first alternation). The dropped portion is **summarised by the model itself** via
+  `Compactor.CompactWithSummaryAsync` and the summary is prepended to the first kept user message;
+  on any provider error or blank summary, falls back to a non-LLM notice.
+- [x] **Result cache + artifact store** — all four `cache-lookup` / `cache-write` / `invalidate` /
+  `artifact-store` seams are now filled. **Cache:** `IToolResultCache` + `InMemoryToolResultCache`
+  serve read-only `Success` from cache, skip `execute` on hits, never cache errors/`Empty`, and a
+  successful mutating tool invalidates the cache. **Artifact store:** `IArtifactStore` +
+  `InMemoryArtifactStore`; `Success` content above a configurable threshold (default 10k chars) is
+  moved to the store and replaced with a preview + opaque ref, retrievable via the new `ReadArtifact`
+  tool. Wired in the host by default.
+- [x] **Hooks (pre/post-tool + SessionStart)** — `HookSpec` / `HookCondition` (tool name +
+  inputContains) + `HooksConfig` (`preToolUse` / `postToolUse` / `sessionStart`) in
+  `.freeagent/config.json`; `HookRunner` consults them at the existing `pre-hook` / `post-hook`
+  pipeline seams and once at session start; `BashShellExecutor` runs `bash -c` with a 30s timeout
+  and streams hook stdout/stderr to the user's console. Substitutions: `{{tool_name}}`,
+  `{{tool_input}}` (truncated), `{{session_id}}`, `{{working_directory}}`. Failures are non-fatal.
+- [x] **Sub-agents** — `AgentDefinition` / `AgentRegistry` + `SubAgentRunner` build an isolated
+  sub-session with a filtered tool registry, the role's system-prompt suffix, no-op persistence,
+  and silent events; `SpawnAgentTool` exposes it to the model with `AgentSpawnCap` (not auto-allowed
+  — each spawn requires approval or an allow rule). Four default roles registered in the host:
+  **Explore**, **Plan**, **Coder**, **Verify**.
+- [x] **Richer editing tools** — `EditFile` (literal string-replace, unique-match safety,
+  `replace_all` opt-in), `MultiEditFile` (atomic batch of edits per file), `ApplyPatch`
+  (unified-diff application — atomic per-file, unique-match for each hunk), and a kernel-side
+  **colored diff renderer** (`Kernel/Diff/ColoredDiff.cs` — line-level LCS + standard unified-diff
+  format with configurable context, optional ANSI red/green/cyan; integrated into `/undo` so the
+  reverted change is shown to the user) all done. The TUI / VS Code panels render the same diff
+  representation; only the styling changes.
+- [x] **System-prompt assembly** — done: base instructions (overridable file) + working directory +
+  git branch (read directly from `.git/HEAD`, no subprocess) + a project context file
+  (`CLAUDE.md` / `AGENTS.md` / `FREEAGENT.md`, first found, content appended). Cross-session
+  memory is exposed as **tools** (`ReadMemoryTool` / `WriteMemoryTool`) so the model loads
+  memory deliberately rather than every entry being auto-injected. *Remaining (later): git status
+  summary in addition to branch; memory-key inventory in the prompt if useful.*
+- [x] **Cross-session memory** — `ReadMemoryTool` (read-only, auto-allowed via `MemoryCap` read) +
+  `WriteMemoryTool` (writable, requires approval), backed by markdown files under
+  `~/.config/freeagent/memory/` (XDG-aware). Keys restricted to `[A-Za-z0-9._-]+`. Registered in
+  the host.
+- [x] **File history, `/undo`, and `/revert`** — per-write snapshots and `/undo` done
+  (`SessionState.History`, recorded by `WriteFileTool` / `EditFileTool` / `MultiEditFileTool` /
+  `ApplyPatchTool`, popped by the host's `/undo`). `/revert [N]` drops the last N user turns from
+  the transcript (leading System messages preserved). Files and conversation revert independently
+  — combine `/undo` and `/revert` for a full rollback.
+
+## Architecture direction — decided (see [ADR 0005](docs/decisions/0005-headless-core-protocol.md))
+
+**Target: headless core + protocol, with pluggable frontends.** The C# kernel exposes a server
+(an HTTP API described by an OpenAPI spec + an SSE event stream); the TUI, a web frontend, editors
+(via ACP), and remote access are all **clients of that one protocol** — the opencode pattern (a
+client can `attach` to a local *or* remote server and holds zero agent logic). This is what makes
+the opencode-grade Bun/opentui TUI reachable from a C# core.
+
+Phasing (the kernel is *already* effectively headless — `SessionRuntime` + `IEventSink`):
+
+- [x] Keep building near-term/coming-next features **in-process** for now; just keep
+  `SessionRuntime` / `IEventSink` / input frontend-agnostic so the seam stays clean. Phase
+  complete — `SessionRuntime.SwapEventSink` was added so each frontend can route events into its
+  own per-turn sink without recreating the runtime.
+- [x] **Protocol server** — new `FreeAgent.Server` project (ASP.NET Core minimal API). Endpoints:
+  `POST /sessions` (create + return id + working dir), `GET /sessions` (list active ids),
+  `GET /sessions/{id}` (state summary: message count, plan mode, tags, iterations),
+  `POST /sessions/{id}/turns` (submit user input; SSE response streams text/thinking/tool_call/
+  tool_result/usage events, then a final `done` event with the assembled reply), `DELETE
+  /sessions/{id}`. `HttpSseEventSink` bridges `IEventSink` callbacks to one SSE event per
+  callback. Per-session runtime state lives in an in-memory `SessionRegistry`; the kernel-side
+  `JsonlSessionStore` still owns disk durability. Optional API-key gate via
+  `FREEAGENT_SERVER_API_KEY` env var (HTTP `Authorization: Bearer <key>`) — when unset, the server
+  is open and intended for loopback bind only. Tested with `WebApplicationFactory` in-process
+  (no network bind): create / list / get / get-404 / delete / delete-again-404 / post-turn-404 /
+  post-turn-400 + API-key-rejects / API-key-accepts.
+- [x] First protocol **frontend (scaffold)** — `clients/tui/` Bun + TypeScript package with a
+  full protocol client (`FreeAgentClient`: CRUD + SSE-streamed `streamTurn`) and a smoke CLI that
+  creates a session, submits one turn from argv, and prints the SSE stream. SSE parser unit-tested
+  with `bun test` (four cases — single event, joined events, split-across-chunks reassembly,
+  comment-line / malformed-record handling). The opentui-rendered full-screen UI builds on top of
+  this without changes to the protocol surface. The existing console host remains the
+  minimal built-in/fallback client.
+
+## On the horizon — integrations & ecosystem
+
+- [x] **MCP client** — `IMcpTransport` seam, `JsonRpcClient` (JSON-RPC 2.0 over line-delimited
+  JSON), `McpClient` (`initialize` + `notifications/initialized` + `tools/list` + `tools/call`),
+  `StdioMcpTransport` for child-process servers, `McpServerManager` that spawns each configured
+  server at host startup and registers its remote tools as `mcp__{server}__{tool}` via
+  `McpToolAdapter` (the adapter requires a `ProcessExecCap("mcp:{server}", ...)` so a whole
+  server can be allow- or deny-ruled). Configured via `mcp.servers[]` in `.freeagent/config.json`.
+  Integration smoke test now runs cleanly (root cause: with zero-latency in-memory test transports
+  the read loop could consume a queued response before `CallAsync` had registered its TCS;
+  `JsonRpcClient` now buffers responses for unknown ids so the registration races resolve
+  correctly). End-to-end with real MCP servers still untested.
+- [x] **LSP client** — language-server-backed `hover` / `definition` / `references` (and an
+  `open` action to load file text into the server). `ILspTransport` seam alongside the existing
+  `IMcpTransport` — both extend a new `IJsonRpcTransport` base so `JsonRpcClient` is reusable for
+  any JSON-RPC peer regardless of framing. LSP uses <c>Content-Length</c> framing handled by
+  `StdioLspTransport`. `LspClient` exposes `InitializeAsync` + `DidOpenAsync` + per-method
+  position lookups; `LspToolAdapter` registers four tools per server
+  (`lsp__{name}__{hover|definition|references|open}`); `LspServerManager` spawns the configured
+  servers at host startup. Configured via `lsp.servers[]` in `.freeagent/config.json`; required
+  capability is a `ProcessExecCap("lsp:{server}", …)` so a whole server can be allow- or
+  deny-ruled as a unit (mirrors the MCP adapter shape). End-to-end smoke test runs cleanly after
+  the `JsonRpcClient` early-response buffer fix. Server-pushed `publishDiagnostics` notifications
+  are currently dropped — wire that to a tool in a follow-up.
+- [x] **Roslyn tool (syntactic)** — `CSharpAnalysisTool` parses `.cs` files with
+  `CSharpSyntaxTree` (no semantic model / metadata references, so the dependency stays parse-only)
+  and exposes three actions: `list-types` (one line per class/interface/struct/record/enum/delegate
+  declaration, qualified by enclosing namespace + types), `list-members` (per-type methods, ctors,
+  properties, fields, events, indexers, with parameter-type signatures), and `diagnostics` (syntax
+  parse errors only). **Semantic actions** (full `CSharpCompilation` over the workspace, with
+  metadata references pulled from the host's `TRUSTED_PLATFORM_ASSEMBLIES`, cached after first
+  build): `find-references` (`file:line:col: Kind FullName` for every binding to the requested
+  symbol), `find-definition` (declaration site for the requested symbol), and `semantic-diagnostics`
+  (compiler errors and warnings — distinct from syntax parse errors). Read-only and
+  concurrency-safe; required cap is a `FileReadCap` on the resolved path. Wired into the host
+  registry and the `Explore`/`Plan` sub-agent whitelists. Output capped at 500 lines.
+  `RoslynSemanticHelpers.WorkspacePackageReferences` walks every `obj/project.assets.json` under
+  the working directory and adds the resolved package DLLs to the compilation, so a reference
+  into a NuGet package the workspace's `.csproj` declares (after `dotnet restore`) now binds —
+  the host's `TRUSTED_PLATFORM_ASSEMBLIES` is still the base. The **`find-callers`** action walks
+  the call graph from a target symbol outward, BFS-style, up to `depth=N` (1–5, default 1) — the
+  "blast radius" of a change. Each result line carries `depth N: file:line:col: caller-display
+  calls target-display`. Built without `Microsoft.CodeAnalysis.Workspaces.SymbolFinder` (uses the
+  bare `Compilation` + per-tree `SemanticModel` so the dependency cost stays the same as
+  `find-references`).
+- [x] **Command palette (registry layer)** — kernel-side `CommandRegistry` with
+  `CommandDefinition` records (id, label, description, shortcut, category) and a subsequence
+  fuzzy matcher (`FuzzyScore`) so a tighter cluster of query characters scores ahead of a wider
+  spread. `HostCommands.BuildDefaultRegistry` registers every existing slash command — single
+  source of truth for the `/commands [query]` REPL command and host command metadata. The shipped
+  TUI has its own client-side slash-command parser over the protocol surface.
+- [x] **Status line repositioning** — `Host/StatusBar.cs` adds an opt-in bottom status bar to the
+  existing console host (set `FREE_STATUS_BAR=1`). Pure ANSI: `[1;Hr` carves out a fixed
+  scroll region, `[s…[u` saves/restores the cursor around the repaint. Renders
+  `provider/model | session | msgs: N | iter: N [| PLAN] [| tags] | cwd: …` and repaints after
+  every turn. No-ops when stdout is redirected. Disposing restores the scroll region. The proper
+  Bun/opentui frontend now supplies its own full-screen status presentation; this remains the
+  opt-in equivalent for the scrolling console renderer.
+- [x] **Local model runner (server lifecycle)** — `ModelServerLauncher` spawns `llama-server`
+  (or any OpenAI-compat binary via `--bin <path>`), records the pid in
+  `$XDG_CACHE_HOME/freeagent/model-server.pid`, drains its stdout/stderr to a rolling log, and
+  polls `/health` for up to 30s. `/serve start <model-path> [--port N] [--bin <path>] [-- <extra>]`,
+  `/serve stop`, `/serve status` from the REPL. Idempotent — a second `/serve start` while a
+  server is already running reports the existing pid instead of stomping it. Pre-flight checks
+  for missing model file, port already in use, and binary not on `$PATH`. On success the REPL
+  prints the `OPENAI_BASE_URL=…/v1 FREEMODEL=…` invocation line to point a fresh `freeagent` at
+  it. **Model download / catalog UX** is shipped: `/serve download <url-or-hf:owner/repo/path.gguf>
+  [--name <local-name>]` streams a GGUF into `$XDG_CACHE_HOME/freeagent/models/` (resumable
+  pattern via `.part` rename; HF_TOKEN forwarded for gated repos), `/serve models` lists the
+  catalog, and `/serve start <name>` now accepts bare catalog names in addition to absolute paths.
+  **Remaining follow-up**: a Windows-shaped service-style backend (the current implementation is
+  Linux-shaped).
+- [x] **Multimodal recipe** — `docs/recipes/multimodal.md` documents how to wire image gen,
+  speech-to-text, and text-to-speech the same way LLMs are reached: point `OPENAI_BASE_URL` at an
+  OpenAI-compatible server that already exposes those endpoints (LocalAI is the simplest path —
+  one binary, OpenAI-compatible chat / images / audio routes). The kernel stays text-first by
+  design; the recipe covers the wrapping needed and notes `whisper.net` as the in-process
+  exception worth considering if voice-in ever becomes a real ask. First-class multimodal tools
+  (`GenerateImage`, `Transcribe`, `Speak`) are documented as the additive shape they'd take if
+  ever added.
+- [x] **Playbooks** — templated, parameterized prompt shortcuts. Markdown files in
+  `.freeagent/playbooks/` (project) or `~/.config/freeagent/playbooks/` (user); positional
+  `{{arg1}}…{{argN}}` substitution. Invoked at the prompt with `/run <name> [args]`; bare `/run`
+  lists what's available.
+- [x] **Editor & remote (scaffolds)** — `clients/vscode/` ships a VS Code extension scaffold with
+  two commands ("FreeAgent: New Session", "FreeAgent: Ask…"), a status-bar item, and an output
+  channel that streams the SSE response inline. Settings: `freeagent.baseUrl` +
+  `freeagent.apiKey`. Built on the same HTTP + SSE protocol surface the TUI uses (per ADR 0005,
+  every frontend is a client of the one protocol). Full UX (inline diffs, code-action wiring,
+  tool-approval prompts) builds on top of this scaffold. ACP (Zed) / web frontend / Slack / GitHub
+  apps are the same shape — each a separate package under `clients/` once they're written.
+- [x] **Misc** — **session tagging** (`/tag` / `/untag` + visible in `/status`), **whole-session
+  iteration limit** (env `FREE_SESSION_ITERATIONS`, in addition to the per-turn `MaxIterations=90`),
+  **opt-in OpenTelemetry tracing** (the kernel exposes `SessionRuntime.ActivitySource` and
+  `ToolPipeline.ActivitySource`; attach any `ActivityListener` / OTel SDK to consume), and
+  **file watching** (`WorkspaceFileWatcher`, opt-in via `FREE_WATCH_FILES=1`; surfaces externally
+  changed files as a notice prepended to the next user turn — deduped, sorted, noise-dir filtered,
+  capped to 10 visible with overflow summary), and **session forking** (`/fork` snapshots the
+  current transcript to `session-fork-<id>.jsonl` alongside the live file with a fresh 8-char id,
+  via a dedicated `JsonlSessionStore`; the live session is untouched and the fork is promoted by
+  `mv …jsonl session.jsonl && freeagent --resume <id>`), and **extended-thinking + token-budget
+  controls** (Anthropic provider takes `maxTokens` and `thinkingBudgetTokens` ctor params; the
+  request body emits `thinking: {type: "enabled", budget_tokens: N}` only when budget > 0 and
+  auto-bumps `max_tokens` to `max(maxTokens, budget + 1024)` so callers don't have to remember the
+  constraint; env vars `FREE_MAX_TOKENS` and `FREE_THINKING_BUDGET` wire through from the host)
+  done. Misc section complete.
+
+## Deliberately deferred
+
+The README's "non-goals for now" list — intentionally out of the first cut, kept above
+only to show the trajectory. Note: a *whole-conversation* iteration limit (distinct
+from the current per-turn `MaxIterations`) would be a separate counter if ever added.
+
+## Done
+
+- [x] Capability-based permission engine (auto-allow / hard-block / session rules)
+- [x] 12-step tool-execution pipeline with observable seams
+- [x] Read-only + concurrency-safe parallel / serial execution contract (sibling-abort)
+- [x] Doom-loop detection with bounded recovery (3 re-prompts, then halt)
+- [x] Crash-safe atomic JSONL session persistence
+- [x] OpenAI-compatible streaming provider (SSE, tool calls, reasoning deltas, usage)
+- [x] Real tool adapters — `ReadFile`, `WriteFile`, `ProcessExec`
+- [x] Plan-mode guard in the pipeline
+- [x] Interactive host CLI (REPL, env config, per-turn Ctrl+C)
+
+### Daily-driver usability milestone
+
+- [x] Tool `Description` field wired through `ITool` / `ToolDefinition` / the OpenAI request
+- [x] `Glob` and `Grep` read-only search tools (managed, workspace-scoped, capped)
+- [x] Plan-mode toggle — `EnterPlanMode` / `ExitPlanMode` tools and a `/plan` host command
+- [x] Config-driven permission rules (`PermissionConfig`, `.freeagent/config.json`)
+- [x] Session resume — host `--resume [id]`
+
+### Agent UX wave
+
+- [x] Interactive permission approval (engine `Prompt` outcome, `IPermissionApprover` seam, session grants, console approver, denial-text fix)
+- [x] User-editable system prompt injected on new sessions (`~/.config/freeagent/system.md` + project override)
+- [x] `/help`, `/status`, `/model` slash commands (in addition to `/plan`)
+- [x] Native Anthropic Messages-API streaming provider (text / thinking / tool-use, cache-aware normalized `Usage`) + `FREEPROVIDER` selection with per-provider config sections
+- [x] Context-window management — token tracking + pre-turn turn-aware compaction with LLM-generated summary (fallback notice on failure)
+- [x] `EditFile` tool — safe in-place string-replace editing (unique-match by default)
+- [x] Result cache + artifact store — all four cache/artifact pipeline seams filled; `ReadArtifact` tool retrieves offloaded content
+- [x] File history + `/undo` — per-write snapshots in `SessionState.History`, restored or deleted by `HostCommands.Undo`
+- [x] Cross-session memory — `ReadMemoryTool` / `WriteMemoryTool` (filesystem-backed, XDG-aware)
+- [x] System-prompt assembly — base + working dir + git branch (from `.git/HEAD`) + project context file (`CLAUDE.md` / `AGENTS.md` / `FREEAGENT.md`)
+- [x] Pre/post-tool hooks — `HooksConfig` in `.freeagent/config.json`, `HookRunner` at the pre-hook / post-hook seams, `BashShellExecutor` host-side
+- [x] Sub-agents — `AgentRegistry` + `SubAgentRunner` + `SpawnAgentTool`; default roles `Explore` / `Plan` / `Coder` / `Verify`
