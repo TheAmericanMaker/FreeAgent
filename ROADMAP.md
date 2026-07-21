@@ -290,12 +290,9 @@ from the current per-turn `MaxIterations`) would be a separate counter if ever a
 
 ## TUI polish
 
-- [ ] **In-app clipboard copy** — the terminal's Ctrl+C / Ctrl+Shift+C copy shortcuts don't work
-  inside the TUI because opentui puts the terminal in raw mode. Add copy-to-clipboard via
-  OSC 52 (supported by most modern terminals: Konsole, iTerm2, Alacritty, Windows Terminal).
-  Options: `Ctrl+Y` to yank the last assistant response, `/copy` command, or per-block copy.
-  Fall back to tmux buffer or plain-text print if OSC 52 is unsupported. See #31.
-- [ ] **TUI onboarding flow** — surface model discovery (Ollama Cloud model listing, local model
-  pull from Hugging Face) inside the TUI setup wizard rather than requiring manual model name entry.
+- [x] **In-app clipboard copy** — Ctrl+Y copies the last assistant response to the system
+  clipboard via OSC 52. Works on Konsole, iTerm2, Alacritty, Windows Terminal. Fixes #31.
+- [ ] **TUI onboarding flow** — Ollama Cloud model listing is done; remaining: surface local
+  model pull from Hugging Face inside the TUI setup wizard.
 - [ ] **VS Code extension** — the scaffold exists (`clients/vscode/`) but needs real UX: inline
   diffs, tool-approval prompts, streaming chat in the editor pane.
