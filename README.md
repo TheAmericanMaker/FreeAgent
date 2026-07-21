@@ -1,18 +1,13 @@
 # FreeAgent
 
-A Linux-native, modular **agent kernel** for tool-using LLMs, with an interactive
-CLI, an HTTP + SSE protocol server, and a full-screen terminal UI. FreeAgent has
-native adapters for six provider APIs and also talks to **OpenAI-compatible**
-chat-completions endpoints. It streams responses, lets the model call real tools
-(read files, write files, run processes), and enforces a deterministic
-capability-based permission model around every one of those calls.
+An AI coding agent that runs on your machine. It can read, write, and search
+files, run commands, and edit code in any project directory — all behind a
+permission model you control.
 
-The kernel is the product: a small, well-tested core (`FreeAgent.Kernel`) that owns
-the turn loop, the tool-execution pipeline, the permission engine, and crash-safe
-session persistence. The CLI (`FreeAgent.Host`) and server (`FreeAgent.Server`) are
-thin shells over it; `clients/tui` consumes the server protocol.
-
-Licensed under [Apache 2.0](LICENSE). See [NOTICE](NOTICE) for acknowledgments.
+FreeAgent works with **any** LLM provider: OpenAI, Anthropic, Azure, Ollama
+(local or Cloud), AWS Bedrock, Google Vertex, or any OpenAI-compatible endpoint.
+The simplest setup is Ollama — no API key needed for local models, or sign
+into Ollama Cloud to use large models without a GPU.
 
 ```
 You ▸ list the .cs files under src and tell me which is largest
@@ -24,12 +19,125 @@ You ▸ list the .cs files under src and tell me which is largest
 The largest is OpenAIProvider.cs at 307 lines …
 ```
 
+**Two ways to use it:**
+
+- **CLI** — `freeagent` from any project directory. A streaming REPL with
+  slash commands, tool approval prompts, and crash-safe session persistence.
+- **TUI** — `freeagent-ui` for a full-screen terminal UI with in-app setup,
+  streaming chat with Markdown, live tool activity, and a settings screen.
+
+Both share the same kernel — a deterministic, fully-tested agent core with no
+global state and no hidden I/O.
+
+Licensed under [Apache 2.0](LICENSE). See [NOTICE](NOTICE) for acknowledgments.
+
+---
+
+## Quick start
+
+### Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/TheAmericanMaker/FreeAgent/main/scripts/get.sh | bash
+```
+
+This installs the .NET SDK if needed, builds and installs the `freeagent`
+global tool, and runs the setup wizard to configure a provider.
+
+For the full-screen TUI:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/TheAmericanMaker/FreeAgent/main/scripts/get.sh | bash -s -- --tui
+```
+
+### Use
+
+```bash
+cd ~/your-project
+freeagent          # CLI — streaming REPL
+freeagent-ui       # TUI — full-screen terminal UI (after --tui install)
+```
+
+The directory you launch from is the agent's sandbox. It can read, search,
+and edit files there — nothing outside without permission.
+
+### Ollama (easiest provider)
+
+1. Install [Ollama](https://ollama.com) (one-click from their site)
+2. For cloud models: sign in with `ollama signin` or get an API key from
+   [ollama.com/settings/keys](https://ollama.com/settings/keys)
+3. Run `freeagent setup`, pick Ollama, type a model name (e.g.
+   `kimi-k2.7-code:cloud` for cloud, `qwen2.5-coder` for local)
+
+No OpenAI account, no Anthropic account, no API keys to manage. For direct
+Ollama Cloud access without a local install, enter `https://ollama.com` as
+the host and your API key — the setup wizard will list available models.
+
+---
+
+## What can it do?
+
+- **Read, write, and edit files** in your project — safely, with
+  unique-match editing and crash-atomic writes
+- **Run shell commands** — `git`, `dotnet`, `make`, anything — behind a
+  permission model that auto-allows safe read-only operations
+- **Search code** — glob and grep, workspace-scoped, capped output
+- **Analyze C# code** — Roslyn-powered type/member listing, find-references,
+  find-definition, semantic diagnostics
+- **Use sub-agents** — spawn focused workers (Explore, Plan, Coder, Verify)
+  for complex tasks
+- **Connect external tools** — MCP servers and LSP language servers via
+  JSON-RPC over stdio
+- **Manage context** — automatic compaction with LLM-generated summaries when
+  the context window fills up
+- **Persist sessions** — crash-safe JSONL transcripts, resumable with
+  `--resume`
+- **Run playbooks** — templated, parameterized prompt shortcuts in Markdown
+
+---
+
+## Keybindings (TUI)
+
+| Key | Action |
+|-----|--------|
+| Tab / Shift+Tab | Move between fields |
+| Enter | Send message / activate |
+| Escape | Cancel a running turn |
+| Ctrl+S | Open settings |
+| Ctrl+Y | Copy last response to clipboard |
+| Ctrl+Q | Quit |
+| PageUp / PageDn | Scroll transcript |
+
+---
+
+## Why FreeAgent
+
+- **Provider-agnostic.** Native adapters for OpenAI, Anthropic, Azure OpenAI,
+  Ollama (local + Cloud), AWS Bedrock, and Google Vertex AI — any
+  OpenAI-compatible endpoint also works. That freedom is where the name comes
+  from.
+- **Safe by construction.** Tools never act before the permission engine
+  approves the specific *capabilities* a call needs. Some binaries (`sudo`,
+  `chmod`, ...) and write paths (`/etc`, `/usr`, ...) are blocked
+  unconditionally and cannot be re-enabled by an allow rule.
+- **Deterministic and testable.** The kernel has no global state and no hidden
+  I/O. Providers, tools, the clock-free permission engine, and the filesystem
+  are all interfaces, so the 550-test suite runs entirely against fakes — no
+  network, no model, no real filesystem.
+- **Crash-safe.** Sessions persist to JSONL through an atomic write-temp →
+  fsync → rename → fsync-dir sequence, so a crash mid-write never corrupts the
+  transcript.
+- **Frontend-agnostic.** The kernel is headless; the CLI and TUI are both
+  frontends over the same HTTP + SSE protocol surface.
+
 ---
 
 ## Contents
 
-- [Why FreeAgent](#why-freeagent)
 - [Quick start](#quick-start)
+- [What can it do?](#what-can-it-do)
+- [Keybindings (TUI)](#keybindings-tui)
+- [Why FreeAgent](#why-freeagent)
 - [Configuration](#configuration)
 - [How a turn works](#how-a-turn-works)
 - [The tool-execution pipeline](#the-tool-execution-pipeline)
@@ -41,90 +149,27 @@ The largest is OpenAIProvider.cs at 307 lines …
 - [Design decisions](#design-decisions)
 - [Roadmap & non-goals](#roadmap--non-goals)
 - [Security](#security)
-- [License and provenance](#license-and-provenance)
+- [License and acknowledgments](#license-and-acknowledgments)
 
----
+## Install (from source)
 
-## Why FreeAgent
-
-- **Provider-agnostic.** Native adapters for OpenAI, Anthropic, Azure OpenAI, Ollama,
-  AWS Bedrock, and Google Vertex AI — any OpenAI-compatible `/chat/completions`
-  endpoint (Groq, gateways, local servers) also works through the OpenAI path. That
-  freedom is where the name comes from.
-- **Safe by construction.** Tools never act before the permission engine approves
-  the specific *capabilities* a call needs. Some binaries (`sudo`, `chmod`, …) and
-  write paths (`/etc`, `/usr`, …) are blocked unconditionally and cannot be
-  re-enabled by an allow rule.
-- **Deterministic and testable.** The kernel has no global state and no hidden I/O.
-  Providers, tools, the clock-free permission engine, and the filesystem are all
-  interfaces, so the 550-test suite runs entirely against fakes — no network, no model,
-  no real filesystem.
-- **Crash-safe.** Sessions persist to JSONL through an atomic write-temp → fsync →
-  rename → fsync-dir sequence, so a crash mid-write never corrupts the transcript.
-- **Frontend-agnostic.** Per ADR 0005, the kernel is headless; `FreeAgent.Host`
-  is one frontend (interactive CLI) and `FreeAgent.Server` is another (HTTP + SSE
-  protocol with an OpenAPI spec at `/openapi/v1.json`).
-
-## Install
-
-### Quick install (one line)
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/TheAmericanMaker/FreeAgent/main/scripts/get.sh | bash
-```
-
-This detects your OS, installs the .NET 10 SDK if needed, builds and installs the
-`freeagent` global tool, then runs the interactive setup wizard to configure a provider.
-Works on Fedora, Ubuntu/Debian, macOS, and any Linux distro with `curl`.
-
-After install, from any project directory:
-
-```bash
-freeagent        # start a session
-```
-
-### Full-screen TUI
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/TheAmericanMaker/FreeAgent/main/scripts/get.sh | bash -s -- --tui
-```
-
-Or from a clone:
+<details>
+<summary>Build from source instead of the one-liner</summary>
 
 ```bash
 git clone https://github.com/TheAmericanMaker/FreeAgent.git
 cd FreeAgent
-scripts/install-tui.sh          # Windows: powershell -ExecutionPolicy Bypass -File scripts\install-tui.ps1
-scripts/freeagent-ui            # Windows: scripts\freeagent-ui.ps1
+./scripts/install.sh                # CLI
+scripts/install-tui.sh              # TUI (also installs freeagent-ui globally)
 ```
 
-`install-tui` installs Bun if needed, restores the UI's dependencies, and publishes
-`FreeAgent.Server` as a **self-contained binary** — so after install the app launches with no .NET
-SDK at run time. (Publishing needs the .NET 10 SDK once; pass `--skip-publish` to use a `dotnet run`
-dev server instead.) On first launch the app walks you through provider setup inside the UI. The
-TUI lives in [`clients/tui/`](clients/tui/).
-
-### CLI tool from source
+Or directly from NuGet:
 
 ```bash
-git clone https://github.com/TheAmericanMaker/FreeAgent.git
-cd FreeAgent
-./scripts/install.sh
+dotnet tool install --global FreeAgent
 ```
 
-The installer runs a few pre-flight checks (`.NET 10` SDK present, `~/.dotnet/tools` on `PATH`),
-builds + packs + installs the `freeagent` global tool, then hands off to **`freeagent setup`** —
-a wizard that asks which provider you want, prompts for credentials (API key input is masked),
-and writes `~/.config/freeagent/config.json` with mode `600`. Re-run `freeagent setup` any time
-you want to switch providers or add another one alongside the current default.
-
-Other modes if you'd rather not be prompted:
-
-```bash
-./scripts/install.sh --non-interactive   # build + install only; no prompts, no wizard
-./scripts/install.sh --skip-setup        # interactive install but don't run the wizard
-dotnet tool install --global FreeAgent   # once a release lands on NuGet
-```
+</details>
 
 To remove it later:
 
